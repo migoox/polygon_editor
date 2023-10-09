@@ -1,0 +1,2 @@
+cargo:rustc-link-lib=dylib=GL
+cargo:rustc-link-lib=dylib=GLU

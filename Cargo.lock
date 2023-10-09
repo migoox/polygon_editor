@@ -132,15 +132,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "lab1"
-version = "0.1.0"
-dependencies = [
- "egui-sfml",
- "rand",
- "sfml",
-]
-
-[[package]]
 name = "libc"
 version = "0.2.148"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -216,6 +207,15 @@ dependencies = [
  "redox_syscall",
  "smallvec",
  "windows-targets",
+]
+
+[[package]]
+name = "polygon_editor"
+version = "0.1.0"
+dependencies = [
+ "egui-sfml",
+ "rand",
+ "sfml",
 ]
 
 [[package]]

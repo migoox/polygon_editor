@@ -1,9 +1,12 @@
 [package]
-name = "lab1"
+name = "polygon_editor"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[[bin]]
+name = "polygon_editor"
+src = "src/main.rs"
 
 [dependencies]
 sfml = "0.20.0"
