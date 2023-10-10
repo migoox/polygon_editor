@@ -5,7 +5,6 @@ use egui_sfml::{
 };
 
 use sfml::graphics::RenderTarget;
-use sfml::system::Vector2f;
 
 pub mod sf {
     pub use sfml::graphics::*;
@@ -22,11 +21,12 @@ pub enum DrawingMode {
     GPUThickLines,
     CPUBresenhamLines,
 }
+
 pub struct Application<'a> {
     window: sf::RenderWindow,
     program_scale: f32,
     test: polygon::Polygon<'a>,
-
+    test2: polygon::PolygonBuilder<'a>,
     drawing_mode: DrawingMode,
 }
 
@@ -50,7 +50,8 @@ impl Application<'_> {
                 sf::Vector2f::new(100., 100.),
                 sf::Vector2f::new(100., 50.),
                 sf::Vector2f::new(0., 0.),
-            ], sf::Color::rgb(0, 255, 0)),
+            ]),
+            test2: polygon::PolygonBuilder::new(),
             drawing_mode: DrawingMode::GPULines,
         }
     }
@@ -119,24 +120,44 @@ impl Application<'_> {
     }
 
     fn handle_events(&mut self, ev: &sf::Event) {
-        self.test.update_input(&ev);
+        self.test2.update_input(&ev);
     }
 
     fn update(&mut self, dt: f32) {
-        self.test.update(dt);
+        self.test2.update(dt);
     }
 
     fn render(&mut self) {
         match self.drawing_mode {
-            DrawingMode::GPULines => self.test.draw_as_lines(&mut self.window),
-            DrawingMode::GPUThickLines => self.test.draw_as_quads(&mut self.window),
+            DrawingMode::GPULines => {
+                self.test.draw_as_lines(&mut self.window);
+
+                match self.test2.raw_polygon() {
+                    Some(&ref poly) => poly.draw_as_lines(&mut self.window),
+                    None => (),
+                }
+            },
+            DrawingMode::GPUThickLines => {
+                self.test.draw_as_quads(&mut self.window);
+
+                match self.test2.raw_polygon() {
+                    Some(&ref poly) => poly.draw_as_quads(&mut self.window),
+                    None => (),
+                }
+            },
             DrawingMode::CPUBresenhamLines => () // TODO
         };
+
         self.test.draw_points_circles(&mut self.window);
+
+        match self.test2.raw_polygon() {
+            Some(&ref poly) => poly.draw_points_circles(&mut self.window),
+            None => (),
+        }
     }
 
     fn render_egui(&mut self, ctx: &egui::Context) {
-        egui::Window::new("Hello").show(ctx, |ui| {
+        egui::Window::new("Options").show(ctx, |ui| {
             // Pick the drawing method
             egui::ComboBox::from_label("Drawing method")
                 .selected_text(match self.drawing_mode {
