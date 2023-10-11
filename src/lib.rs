@@ -132,7 +132,7 @@ impl Application<'_> {
     }
 
     fn update(&mut self, dt: f32) {
-        self.polygon_builder.update(dt);
+        self.polygon_builder.update(dt, &self.window);
     }
 
     fn render(&mut self) {
@@ -168,6 +168,8 @@ impl Application<'_> {
             Some(&ref poly) => poly.draw_points_circles(&mut self.window),
             None => (),
         }
+
+        self.polygon_builder.draw(&mut self.window);
     }
 
     fn render_egui(&mut self, ctx: &egui::Context) {
@@ -186,6 +188,14 @@ impl Application<'_> {
                     ui.selectable_value(&mut self.drawing_mode, DrawingMode::GPUThickLines, "Thick Lines [GPU]");
                     ui.selectable_value(&mut self.drawing_mode, DrawingMode::CPUBresenhamLines, "Bresenham Lines [CPU]");
                 });
+
+            if ui.button("Add a polygon").clicked() {
+                self.polygon_builder.start();
+            }
+
+            if ui.button("Cancel").clicked() {
+                self.polygon_builder.cancel();
+            }
         });
     }
 }

@@ -6,6 +6,10 @@ const POINT_RADIUS: f32 = 5.0;
 const LINES_COLOR: sf::Color = sf::Color::GREEN;
 const POINTS_COLOR: sf::Color = sf::Color::RED;
 
+const POINT_DETECTION_RADIUS: f32 = 10.0;
+const POINT_DETECTION_COLOR: sf::Color = sf::Color::BLUE;
+
+
 pub struct Polygon<'s> {
     points: Vec<sf::Vector2f>,
     points_circles: Vec<sf::CircleShape<'s>>,
@@ -13,6 +17,11 @@ pub struct Polygon<'s> {
     lines_vb: sf::VertexBuffer,
 
     // Gadgets
+}
+fn distance(point1: &sf::Vector2f, point2: &sf::Vector2f) -> f32 {
+    let dx = point1.x - point2.x;
+    let dy = point1.y - point2.y;
+    (dx * dx + dy * dy).sqrt()
 }
 
 impl Polygon<'_> {
@@ -23,6 +32,9 @@ impl Polygon<'_> {
             quads_vb: sf::VertexBuffer::new(sf::PrimitiveType::QUADS, 0, sf::VertexBufferUsage::DYNAMIC),
             lines_vb: sf::VertexBuffer::new(sf::PrimitiveType::LINE_STRIP, 0, sf::VertexBufferUsage::DYNAMIC),
         }
+    }
+    pub fn points_count(&self) -> u32 {
+        self.points.len() as u32
     }
 
     fn generate_lines_vb(points: &Vec<sf::Vector2f>) -> sf::VertexBuffer {
@@ -150,14 +162,27 @@ impl Polygon<'_> {
 
 pub struct PolygonBuilder<'s> {
     raw_polygon: Option<Polygon<'s>>,
+
+    active: bool,
+
     left_btn_pressed: bool,
+
+    show_helper_circle: bool,
+    helper_circle: sf::CircleShape<'s>,
 }
 
 impl PolygonBuilder<'_> {
     pub fn new() -> PolygonBuilder<'static> {
+        let mut helper_circle = sf::CircleShape::new(POINT_DETECTION_RADIUS, 30);
+        helper_circle.set_fill_color(POINT_DETECTION_COLOR);
+        helper_circle.set_origin(sf::Vector2f::new(POINT_DETECTION_RADIUS, POINT_DETECTION_RADIUS));
+
         PolygonBuilder {
             raw_polygon: None,
+            active: false,
             left_btn_pressed: false,
+            show_helper_circle: false,
+            helper_circle
         }
     }
 
@@ -178,9 +203,25 @@ impl PolygonBuilder<'_> {
         if let Some(poly) = &mut self.raw_polygon {
             poly.clear();
         }
+
+        self.show_helper_circle = false;
+    }
+
+    pub fn start(&mut self) {
+        self.clear();
+        self.active = true;
+    }
+
+    pub fn cancel(&mut self) {
+        self.clear();
+        self.active = false;
     }
 
     pub fn update_input(&mut self, ev: &sf::Event) {
+        if !self.active {
+            return;
+        }
+
         match ev {
             sf::Event::MouseButtonPressed { button, x, y } => {
                 if !self.left_btn_pressed {
@@ -197,14 +238,32 @@ impl PolygonBuilder<'_> {
 
     }
 
-    pub fn update(&mut self, _dt: f32) {
+    pub fn update(&mut self, _dt: f32, window: &sf::RenderWindow) {
+        if let Some(poly) = &mut self.raw_polygon {
+            // Show circle helper to complete the polygon creation
+            if poly.points_count() >= 3 {
+                let m_pos = window.mouse_position();
+                let m_pos = sf::Vector2f::new(m_pos.x as f32, m_pos.y as f32);
 
+                if distance(&poly.points[0], &m_pos) <= POINT_DETECTION_RADIUS {
+                    self.helper_circle.set_position(poly.points[0]);
+                    self.show_helper_circle = true;
+                } else {
+                    self.show_helper_circle = false;
+                }
+            }
+        }
     }
 
     pub fn raw_polygon(&self) -> Option<&Polygon> {
         self.raw_polygon.as_ref()
     }
 
+    pub fn draw(&self, target: &mut dyn sf::RenderTarget) {
+        if self.show_helper_circle {
+            target.draw(&self.helper_circle);
+        }
+    }
     pub fn build(&mut self) -> PolygonObject {
 
         PolygonObject {
