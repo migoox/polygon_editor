@@ -26,7 +26,7 @@ pub struct Application<'a> {
     window: sf::RenderWindow,
     program_scale: f32,
     polygon_builder: polygon::PolygonBuilder<'a>,
-    polygons: Vec<polygon::PolygonObject>,
+    polygons: Vec<polygon::PolygonObject<'a>>,
     drawing_mode: DrawingMode,
     egui_rect: egui::Rect,
 }
@@ -127,8 +127,12 @@ impl Application<'_> {
         ctx.set_style(style);
     }
 
+
     fn handle_events(&mut self, ev: &sf::Event) {
-        self.polygon_builder.update_input(&ev);
+        let poly_opt = self.polygon_builder.update_input_or_build(ev);
+        if let Some(poly) = poly_opt {
+            self.polygons.push(poly);
+        }
     }
 
     fn update(&mut self, dt: f32) {
@@ -139,7 +143,7 @@ impl Application<'_> {
         match self.drawing_mode {
             DrawingMode::GPULines => {
                 for poly in &self.polygons {
-
+                    poly.raw_polygon().draw_as_lines(&mut self.window);
                 }
 
                 match self.polygon_builder.raw_polygon() {
@@ -149,7 +153,7 @@ impl Application<'_> {
             },
             DrawingMode::GPUThickLines => {
                 for poly in &self.polygons {
-
+                    poly.raw_polygon().draw_as_quads(&mut self.window);
                 }
 
                 match self.polygon_builder.raw_polygon() {
@@ -161,7 +165,7 @@ impl Application<'_> {
         };
 
         for poly in &self.polygons {
-
+            poly.raw_polygon().draw_points_circles(&mut self.window);
         }
 
         match self.polygon_builder.raw_polygon() {
