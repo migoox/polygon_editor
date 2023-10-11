@@ -28,6 +28,7 @@ pub struct Application<'a> {
     test: polygon::Polygon<'a>,
     test2: polygon::PolygonBuilder<'a>,
     drawing_mode: DrawingMode,
+    egui_rect: egui::Rect,
 }
 
 impl Application<'_> {
@@ -53,6 +54,7 @@ impl Application<'_> {
             ]),
             test2: polygon::PolygonBuilder::new(),
             drawing_mode: DrawingMode::GPULines,
+            egui_rect: egui::Rect::EVERYTHING,
         }
     }
 
@@ -65,11 +67,21 @@ impl Application<'_> {
                 // Feed egui with the input detected by the sfml
                 sfegui.add_event(&ev);
 
-                // Handle events
+                // Close the program
+                if ev == sf::Event::Closed {
+                    self.window.close()
+                }
+
+                // If mouse has been clicked do not react when it's inside of the egui window bounds
                 match ev {
-                    sf::Event::Closed => self.window.close(),
+                    sf::Event::MouseButtonPressed { button, x, y } =>  {
+                        if !self.egui_rect.contains(egui::Pos2::new(x as f32, y as f32)) {
+                            self.handle_events(&ev);
+                        }
+                    },
                     _ => self.handle_events(&ev),
                 }
+
             }
 
             // Update
@@ -158,6 +170,8 @@ impl Application<'_> {
 
     fn render_egui(&mut self, ctx: &egui::Context) {
         egui::Window::new("Options").show(ctx, |ui| {
+            self.egui_rect = ctx.used_rect();
+
             // Pick the drawing method
             egui::ComboBox::from_label("Drawing method")
                 .selected_text(match self.drawing_mode {
