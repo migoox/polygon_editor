@@ -123,7 +123,10 @@ impl Polygon<'_> {
     }
 
     pub fn clear(&mut self) {
-        // TODO
+        self.lines_vb = sf::VertexBuffer::new(sf::PrimitiveType::LINE_STRIP, 0, sf::VertexBufferUsage::DYNAMIC);
+        self.quads_vb = sf::VertexBuffer::new(sf::PrimitiveType::QUADS, 0, sf::VertexBufferUsage::DYNAMIC);
+        self.points_circles.clear();
+        self.points.clear();
     }
 
     pub fn draw_as_quads(&self, target: &mut dyn sf::RenderTarget) {
@@ -172,7 +175,9 @@ impl PolygonBuilder<'_> {
     }
 
     pub fn clear(&mut self) {
-
+        if let Some(poly) = &mut self.raw_polygon {
+            poly.clear();
+        }
     }
 
     pub fn update_input(&mut self, ev: &sf::Event) {
@@ -180,14 +185,12 @@ impl PolygonBuilder<'_> {
             sf::Event::MouseButtonPressed { button, x, y } => {
                 if !self.left_btn_pressed {
                     self.left_btn_pressed = true;
-                    println!("Mouse clicked: {x}, {y}");
 
                     self.add(sf::Vector2::new(*x as f32, *y as f32));
                 }
             },
             sf::Event::MouseButtonReleased { button, x, y } => {
                 self.left_btn_pressed = false;
-
             },
             _ => (),
         }

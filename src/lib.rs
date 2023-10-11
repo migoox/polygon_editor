@@ -25,8 +25,8 @@ pub enum DrawingMode {
 pub struct Application<'a> {
     window: sf::RenderWindow,
     program_scale: f32,
-    test: polygon::Polygon<'a>,
-    test2: polygon::PolygonBuilder<'a>,
+    polygon_builder: polygon::PolygonBuilder<'a>,
+    polygons: Vec<polygon::PolygonObject>,
     drawing_mode: DrawingMode,
     egui_rect: egui::Rect,
 }
@@ -47,12 +47,8 @@ impl Application<'_> {
         Application {
             window,
             program_scale,
-            test: polygon::Polygon::create(vec![
-                sf::Vector2f::new(100., 100.),
-                sf::Vector2f::new(100., 50.),
-                sf::Vector2f::new(0., 0.),
-            ]),
-            test2: polygon::PolygonBuilder::new(),
+            polygon_builder: polygon::PolygonBuilder::new(),
+            polygons: Vec::new(),
             drawing_mode: DrawingMode::GPULines,
             egui_rect: egui::Rect::EVERYTHING,
         }
@@ -132,27 +128,31 @@ impl Application<'_> {
     }
 
     fn handle_events(&mut self, ev: &sf::Event) {
-        self.test2.update_input(&ev);
+        self.polygon_builder.update_input(&ev);
     }
 
     fn update(&mut self, dt: f32) {
-        self.test2.update(dt);
+        self.polygon_builder.update(dt);
     }
 
     fn render(&mut self) {
         match self.drawing_mode {
             DrawingMode::GPULines => {
-                self.test.draw_as_lines(&mut self.window);
+                for poly in &self.polygons {
 
-                match self.test2.raw_polygon() {
+                }
+
+                match self.polygon_builder.raw_polygon() {
                     Some(&ref poly) => poly.draw_as_lines(&mut self.window),
                     None => (),
                 }
             },
             DrawingMode::GPUThickLines => {
-                self.test.draw_as_quads(&mut self.window);
+                for poly in &self.polygons {
 
-                match self.test2.raw_polygon() {
+                }
+
+                match self.polygon_builder.raw_polygon() {
                     Some(&ref poly) => poly.draw_as_quads(&mut self.window),
                     None => (),
                 }
@@ -160,9 +160,11 @@ impl Application<'_> {
             DrawingMode::CPUBresenhamLines => () // TODO
         };
 
-        self.test.draw_points_circles(&mut self.window);
+        for poly in &self.polygons {
 
-        match self.test2.raw_polygon() {
+        }
+
+        match self.polygon_builder.raw_polygon() {
             Some(&ref poly) => poly.draw_points_circles(&mut self.window),
             None => (),
         }
