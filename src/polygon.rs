@@ -133,6 +133,17 @@ impl<'a> Polygon<'a> {
         self.quads_vb = Self::generate_quads_vb(&self.points);
     }
 
+    pub fn update_last_vertex(&mut self, point: sf::Vector2f) {
+        self.points.last_mut().unwrap().x = point.x;
+        self.points.last_mut().unwrap().y = point.y;
+
+        self.points_circles.last_mut().unwrap().set_position(point);
+
+        self.lines_vb.update(&[sf::Vertex::new(point, LINES_COLOR, sf::Vector2f::new(0.0, 0.0))], self.points.len() as u32 - 1);
+
+        // TODO
+    }
+
     pub fn clear(&mut self) {
         self.lines_vb = sf::VertexBuffer::new(sf::PrimitiveType::LINE_STRIP, 0, sf::VertexBufferUsage::DYNAMIC);
         self.quads_vb = sf::VertexBuffer::new(sf::PrimitiveType::QUADS, 0, sf::VertexBufferUsage::DYNAMIC);
@@ -202,6 +213,9 @@ impl<'a> PolygonBuilder<'a> {
     pub fn add(&mut self, point: sf::Vector2f) {
         if self.raw_polygon.is_none() {
             self.raw_polygon = Some(Polygon::new());
+
+            // We need an additional point to attach it to the mouse cursor
+            self.raw_polygon.as_mut().unwrap().push_point(point);
         }
 
         if let Some(ref mut polygon) = self.raw_polygon {
@@ -240,19 +254,21 @@ impl<'a> PolygonBuilder<'a> {
                         return None;
                     }
 
-                    println!("btn-pressed: {}, {}", x, y);
                     let mut finished: bool = false;
-                    let mut start_pos = sf::Vector2f::new(*x as f32, *y as f32);
+                    let mut add_pos = sf::Vector2f::new(*x as f32, *y as f32);
 
                     if let Some(poly) =  &self.raw_polygon {
-                        if distance(&poly.points[0], &start_pos) <= POINT_DETECTION_RADIUS && poly.points_count() > 0 {
-                            start_pos = poly.points[0];
+                        if distance(&poly.points[0], &add_pos) <= POINT_DETECTION_RADIUS && poly.points_count() > 0 {
+                            add_pos = poly.points[0];
                             finished = true;
                         }
                     }
-                    self.add(start_pos);
+                    if !finished {
+                        self.add(add_pos);
+                    } else {
+                        self.raw_polygon.as_mut().unwrap().update_last_vertex(add_pos);
 
-                    if finished {
+
                         self.active = false;
                         self.clear_draw_flags();
                         let poly = std::mem::replace(&mut self.raw_polygon, None);
@@ -271,10 +287,11 @@ impl<'a> PolygonBuilder<'a> {
 
     pub fn update(&mut self, _dt: f32, window: &sf::RenderWindow) {
         if let Some(poly) = &mut self.raw_polygon {
+            let m_pos = window.mouse_position();
+            let m_pos = sf::Vector2f::new(m_pos.x as f32, m_pos.y as f32);
+
             // Show circle helper to complete the polygon creation
             if poly.points_count() >= 3 {
-                let m_pos = window.mouse_position();
-                let m_pos = sf::Vector2f::new(m_pos.x as f32, m_pos.y as f32);
 
                 if distance(&poly.points[0], &m_pos) <= POINT_DETECTION_RADIUS {
                     self.helper_circle.set_position(poly.points[0]);
@@ -283,6 +300,9 @@ impl<'a> PolygonBuilder<'a> {
                     self.show_helper_circle = false;
                 }
             }
+
+            // Update cursor vertex position
+            poly.update_last_vertex(m_pos);
         }
     }
 
