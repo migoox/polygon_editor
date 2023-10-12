@@ -3,11 +3,12 @@ use super::sf;
 
 const LINE_THICKNESS: f32 = 6.0;
 const POINT_RADIUS: f32 = 5.0;
-const LINES_COLOR: sf::Color = sf::Color::GREEN;
-const POINTS_COLOR: sf::Color = sf::Color::RED;
+const LINES_COLOR: sf::Color = sf::Color::WHITE;
+const POINTS_COLOR: sf::Color = sf::Color::BLUE;
 
 const POINT_DETECTION_RADIUS: f32 = 10.0;
-const POINT_DETECTION_COLOR: sf::Color = sf::Color::BLUE;
+const POINT_DETECTION_COLOR_CORRECT: sf::Color = sf::Color::GREEN;
+const POINT_DETECTION_COLOR_INCORRECT: sf::Color = sf::Color::RED;
 
 
 pub struct Polygon<'a> {
@@ -156,7 +157,7 @@ impl<'a> Polygon<'a> {
         // TODO
     }
 
-    pub fn get_first_point(&self) -> Option<sf::Vector2f> {
+    pub fn first_point(&self) -> Option<sf::Vector2f> {
         if self.points_count() > 0 {
             return Some(self.points[0]);
         }
@@ -214,7 +215,7 @@ pub struct PolygonBuilder<'s> {
 impl<'a> PolygonBuilder<'a> {
     pub fn new() -> PolygonBuilder<'a> {
         let mut helper_circle = sf::CircleShape::new(POINT_DETECTION_RADIUS, 30);
-        helper_circle.set_fill_color(POINT_DETECTION_COLOR);
+        helper_circle.set_fill_color(POINT_DETECTION_COLOR_CORRECT);
         helper_circle.set_origin(sf::Vector2f::new(POINT_DETECTION_RADIUS, POINT_DETECTION_RADIUS));
 
         PolygonBuilder {
@@ -227,8 +228,8 @@ impl<'a> PolygonBuilder<'a> {
     }
 
 
-    // If raw_polygon is None => creates a new one and adds point
-    // Else just adds point
+    // If raw_polygon is None => creates a new one and adds starting point and the cursor point
+    // Else just adds a new point
     pub fn add(&mut self, point: sf::Vector2f) {
         if self.raw_polygon.is_none() {
             // We need an additional point to attach it to the mouse cursor
@@ -271,27 +272,34 @@ impl<'a> PolygonBuilder<'a> {
                         return None;
                     }
 
-                    let mut finished: bool = false;
-                    let mut add_pos = sf::Vector2f::new(*x as f32, *y as f32);
+                    let add_pos = sf::Vector2f::new(*x as f32, *y as f32);
 
-                    if let Some(poly) =  &self.raw_polygon {
-                        if distance(&poly.points[0], &add_pos) <= POINT_DETECTION_RADIUS && poly.points_count() > 0 {
-                            add_pos = poly.points[0];
-                            finished = true;
+                    if let Some(poly) =  &mut self.raw_polygon {
 
+                        // If a polygon already exists, there must be at least 2 vertices inside
+                        let first = poly.first_point().unwrap();
 
+                        if distance(&first, &add_pos) <= POINT_DETECTION_RADIUS  {
+                            if poly.points_count() > 3 {
+                                // If this condition is met, adding a new polygon is finished
+
+                                // Change the posititon of the last vertex (cursor vertex)
+                                poly.update_last_vertex(first);
+
+                                // Deactivate the builder
+                                self.active = false;
+                                self.clear_draw_flags();
+
+                                // Build the PolygonObject
+                                let poly = std::mem::replace(&mut self.raw_polygon, None);
+                                return Some(PolygonObject::from(poly.unwrap().to_owned()));
+                            } else {
+                                // Prevent from putting all of the points in the same place
+                                return None;
+                            }
                         }
                     }
-                    if !finished {
-                        self.add(add_pos);
-                    } else {
-                        self.raw_polygon.as_mut().unwrap().update_last_vertex(add_pos);
-
-                        self.active = false;
-                        self.clear_draw_flags();
-                        let poly = std::mem::replace(&mut self.raw_polygon, None);
-                        return Some(PolygonObject::from(poly.unwrap().to_owned()));
-                    }
+                    self.add(add_pos);
                 }
             },
             sf::Event::MouseButtonReleased { button, x, y } => {
@@ -302,22 +310,29 @@ impl<'a> PolygonBuilder<'a> {
 
         None
     }
-
     pub fn update(&mut self, _dt: f32, window: &sf::RenderWindow) {
         if let Some(poly) = &mut self.raw_polygon {
+            // Polygon should contain at least 2 vertices here
+            let first = poly.first_point().unwrap();
+
             let m_pos = window.mouse_position();
             let m_pos = sf::Vector2f::new(m_pos.x as f32, m_pos.y as f32);
 
-            // Show circle helper to complete the polygon creation
-            if poly.points_count() >= 3 {
-
-                if distance(&poly.points[0], &m_pos) <= POINT_DETECTION_RADIUS {
-                    self.helper_circle.set_position(poly.points[0]);
+            if distance(&first, &m_pos) <= POINT_DETECTION_RADIUS {
+                // Show the circle helper to complete the polygon creation
+                if poly.points_count() > 3 {
+                    self.helper_circle.set_fill_color(POINT_DETECTION_COLOR_CORRECT);
                     self.show_helper_circle = true;
                 } else {
-                    self.show_helper_circle = false;
+                    self.helper_circle.set_fill_color(POINT_DETECTION_COLOR_INCORRECT);
+                    self.show_helper_circle = true;
                 }
+
+                self.helper_circle.set_position(first);
+            } else {
+                self.show_helper_circle = false;
             }
+            // Show the
 
             // Update cursor vertex position
             poly.update_last_vertex(m_pos);
