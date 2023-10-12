@@ -1,3 +1,4 @@
+use std::io;
 use sfml::graphics::{Drawable, Shape, Transformable};
 use super::sf;
 
@@ -66,8 +67,8 @@ impl<'a> Polygon<'a> {
         }
     }
 
-    pub fn points_count(&self) -> u32 {
-        self.points.len() as u32
+    pub fn points_count(&self) -> usize {
+        self.points.len()
     }
 
     fn generate_lines_vb(points: &Vec<sf::Vector2f>) -> sf::VertexBuffer {
@@ -146,15 +147,23 @@ impl<'a> Polygon<'a> {
         self.quads_vb = Self::generate_quads_vb(&self.points);
     }
 
-    pub fn update_last_vertex(&mut self, point: sf::Vector2f) {
-        self.points.last_mut().unwrap().x = point.x;
-        self.points.last_mut().unwrap().y = point.y;
+    pub fn update_vertex(&mut self, point: sf::Vector2f, index: usize) -> Result<(), io::Error> {
+        if self.points_count() <= index {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
+        }
 
-        self.points_circles.last_mut().unwrap().set_position(point);
+        self.points[index] = point;
+        self.points_circles[index].set_position(point);
 
         self.lines_vb.update(&[sf::Vertex::new(point, LINES_COLOR, sf::Vector2f::new(0.0, 0.0))], self.points.len() as u32 - 1);
 
-        // TODO
+        // TODO: quads_vb
+
+        Ok(())
+    }
+
+    pub fn update_last_vertex(&mut self, point: sf::Vector2f) -> Result<(), io::Error> {
+        self.update_vertex(point, self.points_count() - 1)
     }
 
     pub fn first_point(&self) -> Option<sf::Vector2f> {
@@ -282,7 +291,7 @@ impl<'a> PolygonBuilder<'a> {
                                 // If this condition is met, adding a new polygon is finished
 
                                 // Change the posititon of the last vertex (cursor vertex)
-                                poly.update_last_vertex(first);
+                                poly.update_last_vertex(first).unwrap();
 
                                 // Deactivate the builder
                                 self.active = false;
@@ -336,7 +345,7 @@ impl<'a> PolygonBuilder<'a> {
             }
 
             // Update cursor vertex position
-            poly.update_last_vertex(m_pos);
+            poly.update_last_vertex(m_pos).unwrap();
         }
     }
 
