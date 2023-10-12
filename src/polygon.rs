@@ -31,7 +31,40 @@ impl<'a> Polygon<'a> {
             quads_vb: sf::VertexBuffer::new(sf::PrimitiveType::QUADS, 0, sf::VertexBufferUsage::DYNAMIC),
             lines_vb: sf::VertexBuffer::new(sf::PrimitiveType::LINE_STRIP, 0, sf::VertexBufferUsage::DYNAMIC),
         }
+
     }
+
+    pub fn new_with_start_point(point: sf::Vector2f) -> Polygon<'a> {
+        let mut result = Self::new();
+        result.push_point(point);
+
+        result
+    }
+
+    // Creates polygon from the given points, last point don't have to repeat the first one
+    pub fn create(mut points: Vec<sf::Vector2f>) -> Polygon<'a> {
+        if points.len() > 0 {
+           points.push(points[0]);
+        }
+
+        // Create points circles
+        let points_circles = Self::generate_points_circles(&points);
+
+        // Create lines vertex buffer
+        let lines_vb = Self::generate_lines_vb(&points);
+
+        // Create quads vertex buffer
+        let quads_vb = Self::generate_quads_vb(&points);
+
+        // Return the Polygon instance
+        Polygon {
+            points,
+            points_circles,
+            quads_vb,
+            lines_vb,
+        }
+    }
+
     pub fn points_count(&self) -> u32 {
         self.points.len() as u32
     }
@@ -94,28 +127,7 @@ impl<'a> Polygon<'a> {
         points_circles
     }
 
-    pub fn create(mut points: Vec<sf::Vector2f>) -> Polygon<'a> {
-        if points.len() > 0 {
-           points.push(points[0]);
-        }
 
-        // Create points circles
-        let points_circles = Self::generate_points_circles(&points);
-
-        // Create lines vertex buffer
-        let lines_vb = Self::generate_lines_vb(&points);
-
-        // Create quads vertex buffer
-        let quads_vb = Self::generate_quads_vb(&points);
-
-        // Return the Polygon instance
-        Polygon {
-            points,
-            points_circles,
-            quads_vb,
-            lines_vb,
-        }
-    }
 
 
     pub fn push_point(&mut self, point: sf::Vector2f) {
@@ -142,6 +154,13 @@ impl<'a> Polygon<'a> {
         self.lines_vb.update(&[sf::Vertex::new(point, LINES_COLOR, sf::Vector2f::new(0.0, 0.0))], self.points.len() as u32 - 1);
 
         // TODO
+    }
+
+    pub fn get_first_point(&self) -> Option<sf::Vector2f> {
+        if self.points_count() > 0 {
+            return Some(self.points[0]);
+        }
+        None
     }
 
     pub fn clear(&mut self) {
@@ -212,10 +231,8 @@ impl<'a> PolygonBuilder<'a> {
     // Else just adds point
     pub fn add(&mut self, point: sf::Vector2f) {
         if self.raw_polygon.is_none() {
-            self.raw_polygon = Some(Polygon::new());
-
             // We need an additional point to attach it to the mouse cursor
-            self.raw_polygon.as_mut().unwrap().push_point(point);
+            self.raw_polygon = Some(Polygon::new_with_start_point(point));
         }
 
         if let Some(ref mut polygon) = self.raw_polygon {
@@ -261,13 +278,14 @@ impl<'a> PolygonBuilder<'a> {
                         if distance(&poly.points[0], &add_pos) <= POINT_DETECTION_RADIUS && poly.points_count() > 0 {
                             add_pos = poly.points[0];
                             finished = true;
+
+
                         }
                     }
                     if !finished {
                         self.add(add_pos);
                     } else {
                         self.raw_polygon.as_mut().unwrap().update_last_vertex(add_pos);
-
 
                         self.active = false;
                         self.clear_draw_flags();
