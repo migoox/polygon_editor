@@ -1,4 +1,4 @@
-use sfml::graphics::{Drawable, RenderStates, Shape, Transformable, VertexBufferUsage};
+use sfml::graphics::{Drawable, Shape, Transformable};
 use super::sf;
 
 const LINE_THICKNESS: f32 = 6.0;
@@ -185,7 +185,7 @@ impl<'a> Polygon<'a> {
         }
     }
 
-    pub fn draw_bresenham(&self, img_target: &mut sf::Image) {
+    pub fn draw_bresenham(&self, _img_target: &mut sf::Image) {
         // TODO
     }
 }
@@ -264,7 +264,7 @@ impl<'a> PolygonBuilder<'a> {
 
     pub fn update_input_or_build(&mut self, ev: &sf::Event) -> Option<PolygonObject<'a>> {
         match ev {
-            sf::Event::MouseButtonPressed { button, x, y } => {
+            sf::Event::MouseButtonPressed { button: _, x, y } => {
                 if !self.left_btn_pressed {
                     self.left_btn_pressed = true;
 
@@ -293,16 +293,16 @@ impl<'a> PolygonBuilder<'a> {
                                 // Build the PolygonObject
                                 let poly = std::mem::replace(&mut self.raw_polygon, None);
                                 return Some(PolygonObject::from(poly.unwrap().to_owned()));
-                            } else {
-                                // Prevent from putting all of the points in the same place
-                                return None;
                             }
+
+                            // Prevent from putting all of the points in the same place
+                            return None;
                         }
                     }
                     self.add(add_pos);
                 }
             },
-            sf::Event::MouseButtonReleased { button, x, y } => {
+            sf::Event::MouseButtonReleased { button: _, x: _, y: _ } => {
                 self.left_btn_pressed = false;
             },
             _ => (),
@@ -319,20 +319,19 @@ impl<'a> PolygonBuilder<'a> {
             let m_pos = sf::Vector2f::new(m_pos.x as f32, m_pos.y as f32);
 
             if distance(&first, &m_pos) <= POINT_DETECTION_RADIUS {
-                // Show the circle helper to complete the polygon creation
                 if poly.points_count() > 3 {
+                    // Show the circle helper to complete the polygon creation
                     self.helper_circle.set_fill_color(POINT_DETECTION_COLOR_CORRECT);
-                    self.show_helper_circle = true;
                 } else {
+                    // Show the circle indicating that the completion is impossible
                     self.helper_circle.set_fill_color(POINT_DETECTION_COLOR_INCORRECT);
-                    self.show_helper_circle = true;
                 }
 
+                self.show_helper_circle = true;
                 self.helper_circle.set_position(first);
             } else {
                 self.show_helper_circle = false;
             }
-            // Show the
 
             // Update cursor vertex position
             poly.update_last_vertex(m_pos);

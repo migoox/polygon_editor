@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::time::Instant;
 use egui_sfml::{
     egui,
     SfEgui,
@@ -70,7 +70,7 @@ impl Application<'_> {
 
                 // If mouse has been clicked do not react when it's inside of the egui window bounds
                 match ev {
-                    sf::Event::MouseButtonPressed { button, x, y } =>  {
+                    sf::Event::MouseButtonPressed { button: _, x, y } =>  {
                         if !self.egui_rect.contains(egui::Pos2::new(x as f32, y as f32)) {
                             self.handle_events(&ev);
                         }
