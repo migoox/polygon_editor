@@ -246,9 +246,7 @@ impl<'a> PolygonBuilder<'a> {
     }
 
     pub fn clear(&mut self) {
-        if let Some(poly) = &mut self.raw_polygon {
-            poly.clear();
-        }
+        let _poly = std::mem::replace(&mut self.raw_polygon, None);
         self.clear_draw_flags();
     }
 
@@ -311,6 +309,10 @@ impl<'a> PolygonBuilder<'a> {
         None
     }
     pub fn update(&mut self, _dt: f32, window: &sf::RenderWindow) {
+        if !self.active {
+            return;
+        }
+
         if let Some(poly) = &mut self.raw_polygon {
             // Polygon should contain at least 2 vertices here
             let first = poly.first_point().unwrap();
