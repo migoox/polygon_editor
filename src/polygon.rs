@@ -358,7 +358,9 @@ impl<'a> PolygonBuilder<'a> {
             let first = poly.first_point().unwrap();
 
             let m_pos = window.mouse_position();
-            let m_pos = sf::Vector2f::new(m_pos.x as f32, m_pos.y as f32);
+            let mut m_pos = sf::Vector2f::new(m_pos.x as f32, m_pos.y as f32);
+
+            let mut is_magnet_set: bool = false;
 
             if distance(&first, &m_pos) <= POINT_DETECTION_RADIUS {
                 if poly.points_count() > 3 {
@@ -371,6 +373,10 @@ impl<'a> PolygonBuilder<'a> {
 
                 self.in_helper_circle = true;
                 self.helper_circle.set_position(first);
+
+                // Magnet
+                is_magnet_set = true;
+                m_pos = first;
             } else {
                 self.in_helper_circle = false;
             }
@@ -384,7 +390,7 @@ impl<'a> PolygonBuilder<'a> {
             );
 
             // Detect point intersections with the other lines
-            if poly.points_count() > 3 {
+            if poly.points_count() > 3 && !is_magnet_set {
                 for i in 0..(poly.points_count() - 3) {
                     let line2 = geo::geometry::Line::new(
                         geo::coord!{x: poly.points[i].x, y: poly.points[i].y},
