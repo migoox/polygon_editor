@@ -9,7 +9,6 @@ const LINES_COLOR: sf::Color = sf::Color::WHITE;
 const LINES_COLOR_INCORRECT: sf::Color = sf::Color::RED;
 const POLY_EDGE_MIN_LEN: f32 = 5.;
 const POINTS_COLOR: sf::Color = sf::Color::BLUE;
-
 const POINT_DETECTION_RADIUS: f32 = 10.0;
 const POINT_DETECTION_COLOR_CORRECT: sf::Color = sf::Color::GREEN;
 const POINT_DETECTION_COLOR_INCORRECT: sf::Color = sf::Color::RED;
@@ -49,12 +48,8 @@ impl<'a> Polygon<'a> {
         result
     }
 
-    // Creates polygon from the given points, last point don't have to repeat the first one
+    /// Creates polygon from the given points, the last point must be an exact copy of the first point
     pub fn create(mut points: Vec<sf::Vector2f>) -> Polygon<'a> {
-        if points.len() > 0 {
-           points.push(points[0]);
-        }
-
         // Create points circles
         let points_circles = Self::generate_points_circles(&points);
 
@@ -192,6 +187,33 @@ impl<'a> Polygon<'a> {
         // TODO: quads
     }
 
+    /// Polygon is said to be proper iff the last element of points vector is an
+    /// exact copy of the first element
+    pub fn is_proper(&self) -> bool {
+        if self.points.len() < 4 {
+            return false;
+        }
+
+        // This comparison valid, since if the Polygon is proper, the last point must be
+        // an exact copy of the first point
+        if self.points[0] == self.points[self.points.len() - 1] {
+            return true;
+        }
+
+        return false;
+    }
+    /// This method assumes, that first and the last element of the points are the same
+    /// (polygon has to be a proper polygon)
+    pub fn assert_ccw(&mut self) {
+        let mut sum: f32 = 0.;
+        for i in 0..(self.points.len() - 1) {
+            sum += (self.points[i + 1].x - self.points[i].x)*(self.points[i + 1].y + self.points[i].y);
+        }
+
+        if sum <= 0. {
+            self.points.reverse();
+        }
+    }
 
     pub fn first_point(&self) -> Option<sf::Vector2f> {
         if self.points_count() > 0 {
@@ -313,26 +335,25 @@ impl<'a> PolygonBuilder<'a> {
 
                     let add_pos = sf::Vector2f::new(*x as f32, *y as f32);
 
-                    if let Some(poly) =  &mut self.raw_polygon {
-
+                    if self.raw_polygon.is_some() {
                         // Assert minimal length of the new edge
                         if !self.entered_correct_vertex_region {
-                            for i in 1..(poly.points_count() - 1) {
-                                if distance(&add_pos, &poly.points[i]) <= POLY_EDGE_MIN_LEN {
+                            for i in 1..(self.raw_polygon.as_ref().unwrap().points_count() - 1) {
+                                if distance(&add_pos, &self.raw_polygon.as_ref().unwrap().points[i]) <= POLY_EDGE_MIN_LEN {
                                     return None;
                                 }
                             }
                         }
 
                         // If a polygon already exists, there must be at least 2 vertices inside
-                        let first = poly.first_point().unwrap();
+                        let first = self.raw_polygon.as_ref().unwrap().first_point().unwrap();
 
                         if self.entered_correct_vertex_region  {
-                            if poly.points_count() > 3 {
+                            if self.raw_polygon.as_ref().unwrap().points_count() > 3 {
                                 // If this condition is met, adding a new polygon is finished
 
                                 // Change the position of the last vertex (cursor vertex)
-                                poly.update_last_vertex(first, LINES_COLOR).unwrap();
+                                self.raw_polygon.as_mut().unwrap().update_last_point(first).unwrap();
 
                                 // Deactivate the builder
                                 self.active = false;
