@@ -37,7 +37,8 @@ pub struct Application<'a> {
     window: sf::RenderWindow,
     program_scale: f32,
     // Option is required, since we are temporary taking ownership
-    // of the State, each time the transition function is called
+    // of the State, each time the transition function is called.
+    // In this application curr_state is always Some.
     curr_state: Option<Box<dyn State>>,
     app_ctx: AppContext<'a>,
     drawing_mode: DrawingMode,
@@ -204,6 +205,8 @@ impl Application<'_> {
             Some(&ref poly) => poly.draw_points_circles(&mut self.window),
             None => (),
         }
+
+        self.curr_state.as_ref().unwrap().render(&self.window);
 
         self.app_ctx.polygon_builder.draw(&mut self.window);
     }
