@@ -4,8 +4,6 @@ use egui_sfml::{
     SfEgui,
 };
 
-use line_intersection::{LineInterval, LineRelation};
-
 use sfml::graphics::RenderTarget;
 
 pub mod sf {
@@ -15,6 +13,8 @@ pub mod sf {
 }
 
 pub mod polygon;
+
+const BACKGROUND_COLOR: sf::Color = sf::Color::rgb(37, 43, 72);
 
 #[derive(Debug)]
 #[derive(PartialEq)]
@@ -95,7 +95,7 @@ impl Application<'_> {
                 .unwrap();
 
             // Rendering
-            self.window.clear(sf::Color::rgb(0, 0, 0));
+            self.window.clear(BACKGROUND_COLOR);
             self.render();
             sfegui.draw(&mut self.window, None);
             self.window.display();
@@ -199,8 +199,15 @@ impl Application<'_> {
                 self.polygon_builder.start();
             }
 
-            if ui.button("Cancel").clicked() {
-                self.polygon_builder.cancel();
+            if !self.polygon_builder.is_active() {
+                ui.add(
+                    egui::Button::new("Cancel")
+                        .fill(egui::Color32::from_rgb(36,36,36)),
+                );
+            } else {
+                if ui.button("Cancel").clicked() {
+                    self.polygon_builder.start();
+                }
             }
         });
     }

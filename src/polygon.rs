@@ -5,13 +5,13 @@ use super::sf;
 
 const LINE_THICKNESS: f32 = 6.0;
 const POINT_RADIUS: f32 = 5.0;
-const LINES_COLOR: sf::Color = sf::Color::WHITE;
-const LINES_COLOR_INCORRECT: sf::Color = sf::Color::RED;
+const LINES_COLOR: sf::Color = sf::Color::rgb(180, 180, 179);
+const LINES_COLOR_INCORRECT: sf::Color = sf::Color::rgb(237, 123, 123);
 const POLY_EDGE_MIN_LEN: f32 = 5.;
-const POINTS_COLOR: sf::Color = sf::Color::BLUE;
+const POINTS_COLOR: sf::Color = sf::Color::rgb(247, 233, 135);
 const POINT_DETECTION_RADIUS: f32 = 10.0;
-const POINT_DETECTION_COLOR_CORRECT: sf::Color = sf::Color::GREEN;
-const POINT_DETECTION_COLOR_INCORRECT: sf::Color = sf::Color::RED;
+const POINT_DETECTION_COLOR_CORRECT: sf::Color = sf::Color::rgb(100, 204, 197);
+const POINT_DETECTION_COLOR_INCORRECT: sf::Color = sf::Color::rgb(237, 123, 123);
 
 
 pub struct Polygon<'a> {
@@ -48,7 +48,8 @@ impl<'a> Polygon<'a> {
         result
     }
 
-    /// Creates polygon from the given points, the last point must be an exact copy of the first point
+    /// Creates polygon from the given points. This function doesn't assert that the returned
+    /// Polygon is proper.
     pub fn create(mut points: Vec<sf::Vector2f>) -> Polygon<'a> {
         // Create points circles
         let points_circles = Self::generate_points_circles(&points);
@@ -202,6 +203,7 @@ impl<'a> Polygon<'a> {
 
         return false;
     }
+
     /// This method assumes, that first and the last element of the points are the same
     /// (polygon has to be a proper polygon)
     pub fn assert_ccw(&mut self) {
@@ -308,6 +310,9 @@ impl<'a> PolygonBuilder<'a> {
         self.entered_correct_vertex_region = false;
     }
 
+    pub fn is_active(&self) -> bool {
+        self.active
+    }
     pub fn clear(&mut self) {
         let _poly = std::mem::replace(&mut self.raw_polygon, None);
         self.clear_draw_flags();
