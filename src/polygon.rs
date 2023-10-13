@@ -7,7 +7,7 @@ const LINE_THICKNESS: f32 = 6.0;
 const POINT_RADIUS: f32 = 5.0;
 const LINES_COLOR: sf::Color = sf::Color::WHITE;
 const LINES_COLOR_INCORRECT: sf::Color = sf::Color::RED;
-
+const POLY_EDGE_MIN_LEN: f32 = 5.;
 const POINTS_COLOR: sf::Color = sf::Color::BLUE;
 
 const POINT_DETECTION_RADIUS: f32 = 10.0;
@@ -246,9 +246,10 @@ pub struct PolygonBuilder<'s> {
     helper_circle: sf::CircleShape<'s>,
 
     // PolygonBuilder events
-    in_helper_circle: bool,
     is_line_intersecting: bool,
+    entered_correct_vertex_region: bool,
     left_btn_pressed: bool,
+
 }
 
 impl<'a> PolygonBuilder<'a> {
@@ -262,7 +263,7 @@ impl<'a> PolygonBuilder<'a> {
             active: false,
             left_btn_pressed: false,
             is_line_intersecting: false,
-            in_helper_circle: false,
+            entered_correct_vertex_region: false,
             helper_circle
         }
     }
@@ -282,7 +283,7 @@ impl<'a> PolygonBuilder<'a> {
     }
 
     fn clear_draw_flags(&mut self) {
-        self.in_helper_circle = false;
+        self.entered_correct_vertex_region = false;
     }
 
     pub fn clear(&mut self) {
@@ -314,10 +315,19 @@ impl<'a> PolygonBuilder<'a> {
 
                     if let Some(poly) =  &mut self.raw_polygon {
 
+                        // Assert minimal length of the new edge
+                        if !self.entered_correct_vertex_region {
+                            for i in 1..(poly.points_count() - 1) {
+                                if distance(&add_pos, &poly.points[i]) <= POLY_EDGE_MIN_LEN {
+                                    return None;
+                                }
+                            }
+                        }
+
                         // If a polygon already exists, there must be at least 2 vertices inside
                         let first = poly.first_point().unwrap();
 
-                        if self.in_helper_circle  {
+                        if self.entered_correct_vertex_region  {
                             if poly.points_count() > 3 {
                                 // If this condition is met, adding a new polygon is finished
 
@@ -371,14 +381,14 @@ impl<'a> PolygonBuilder<'a> {
                     self.helper_circle.set_fill_color(POINT_DETECTION_COLOR_INCORRECT);
                 }
 
-                self.in_helper_circle = true;
+                self.entered_correct_vertex_region = true;
                 self.helper_circle.set_position(first);
 
                 // Magnet
                 is_magnet_set = true;
                 m_pos = first;
             } else {
-                self.in_helper_circle = false;
+                self.entered_correct_vertex_region = false;
             }
 
             // Detect new line intersections
@@ -424,7 +434,7 @@ impl<'a> PolygonBuilder<'a> {
     }
 
     pub fn draw(&self, target: &mut dyn sf::RenderTarget) {
-        if self.in_helper_circle {
+        if self.entered_correct_vertex_region {
             target.draw(&self.helper_circle);
         }
     }
