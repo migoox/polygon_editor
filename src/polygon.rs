@@ -291,7 +291,7 @@ impl<'a> PolygonBuilder<'a> {
 
     // If raw_polygon is None => creates a new one and adds starting point and the cursor point
     // Else just adds a new point
-    pub fn add(&mut self, point: sf::Vector2f) {
+    fn add(&mut self, point: sf::Vector2f) {
         if self.raw_polygon.is_none() {
             // We need an additional point to attach it to the mouse cursor
             self.raw_polygon = Some(Polygon::new_with_start_point(point));
@@ -324,12 +324,10 @@ impl<'a> PolygonBuilder<'a> {
         self.active = false;
     }
 
-    pub fn update_input_or_build(&mut self, mouse_pos: sf::Vector2f) -> Option<PolygonObject<'a>> {
+    pub fn add_or_build(&mut self, add_pos: sf::Vector2f) -> Option<PolygonObject<'a>> {
         if !self.active || self.is_line_intersecting {
             return None;
         }
-
-        let add_pos = mouse_pos;
 
         if self.raw_polygon.is_some() {
             // Assert minimal length of the new edge
@@ -368,7 +366,8 @@ impl<'a> PolygonBuilder<'a> {
 
         None
     }
-    pub fn update(&mut self, _dt: f32, window: &sf::RenderWindow) {
+
+    pub fn update(&mut self, _dt: f32, mouse_pos: sf::Vector2f) {
         if !self.active {
             return;
         }
@@ -377,8 +376,7 @@ impl<'a> PolygonBuilder<'a> {
             // Polygon should contain at least 2 vertices here
             let first = poly.first_point().unwrap();
 
-            let m_pos = window.mouse_position();
-            let mut m_pos = sf::Vector2f::new(m_pos.x as f32, m_pos.y as f32);
+            let mut m_pos = mouse_pos;
 
             let mut is_magnet_set: bool = false;
 
@@ -426,7 +424,6 @@ impl<'a> PolygonBuilder<'a> {
                         break;
                     }
                 }
-
             }
 
             // Update cursor vertex position
@@ -462,5 +459,9 @@ impl<'a> PolygonObject<'a> {
     }
     pub fn raw_polygon(&self) -> &Polygon {
         &self.raw_polygon
+    }
+
+    pub fn update(&mut self, _dt: f32, mouse_pos: sf::Vector2f) {
+
     }
 }

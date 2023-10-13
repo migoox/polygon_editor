@@ -165,7 +165,14 @@ impl Application<'_> {
     }
 
     fn update(&mut self, dt: f32) {
-        self.app_ctx.polygon_builder.update(dt, &self.window);
+        self.curr_state.as_mut().unwrap().update(
+            dt,
+            sf::Vector2f::new(
+                self.window.mouse_position().x as f32,
+                self.window.mouse_position().y as f32,
+            ),
+            &mut self.app_ctx,
+        );
     }
 
     fn render(&mut self) {
@@ -201,8 +208,6 @@ impl Application<'_> {
             Some(&ref poly) => poly.draw_points_circles(&mut self.window),
             None => (),
         }
-
-        self.curr_state.as_ref().unwrap().render(&self.window);
 
         self.app_ctx.polygon_builder.draw(&mut self.window);
     }
