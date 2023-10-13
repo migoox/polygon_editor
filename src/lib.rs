@@ -36,6 +36,7 @@ pub struct AppContext<'a> {
 pub struct Application<'a> {
     window: sf::RenderWindow,
     program_scale: f32,
+
     // Option is required, since we are temporary taking ownership
     // of the State, each time the transition function is called.
     // In this application curr_state is always Some.
@@ -144,11 +145,6 @@ impl Application<'_> {
         ctx.set_style(style);
     }
     fn handle_input(&mut self, ev: &sf::Event) {
-        // let poly_opt = self.polygon_builder.update_input_or_build(ev);
-        // if let Some(poly) = poly_opt {
-        //     self.polygons.push(poly);
-        // }
-
         match ev {
             sf::Event::MouseButtonPressed { button: btn, x, y } => {
                 if *btn == sfml::window::mouse::Button::Left {
@@ -169,7 +165,7 @@ impl Application<'_> {
     }
 
     fn update(&mut self, dt: f32) {
-        // self.polygon_builder.update(dt, &self.window);
+        self.app_ctx.polygon_builder.update(dt, &self.window);
     }
 
     fn render(&mut self) {

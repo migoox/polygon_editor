@@ -272,8 +272,6 @@ pub struct PolygonBuilder<'s> {
     // PolygonBuilder events
     is_line_intersecting: bool,
     entered_correct_vertex_region: bool,
-    left_btn_pressed: bool,
-
 }
 
 impl<'a> PolygonBuilder<'a> {
@@ -285,13 +283,11 @@ impl<'a> PolygonBuilder<'a> {
         PolygonBuilder {
             raw_polygon: None,
             active: false,
-            left_btn_pressed: false,
             is_line_intersecting: false,
             entered_correct_vertex_region: false,
             helper_circle
         }
     }
-
 
     // If raw_polygon is None => creates a new one and adds starting point and the cursor point
     // Else just adds a new point
@@ -328,59 +324,47 @@ impl<'a> PolygonBuilder<'a> {
         self.active = false;
     }
 
-    pub fn update_input_or_build(&mut self, ev: &sf::Event) -> Option<PolygonObject<'a>> {
-        match ev {
-            sf::Event::MouseButtonPressed { button: _, x, y } => {
-                if !self.left_btn_pressed {
-                    self.left_btn_pressed = true;
+    pub fn update_input_or_build(&mut self, mouse_pos: sf::Vector2f) -> Option<PolygonObject<'a>> {
+        if !self.active || self.is_line_intersecting {
+            return None;
+        }
 
-                    if !self.active || self.is_line_intersecting {
+        let add_pos = mouse_pos;
+
+        if self.raw_polygon.is_some() {
+            // Assert minimal length of the new edge
+            if !self.entered_correct_vertex_region {
+                for i in 1..(self.raw_polygon.as_ref().unwrap().points_count() - 1) {
+                    if distance(&add_pos, &self.raw_polygon.as_ref().unwrap().points[i]) <= POLY_EDGE_MIN_LEN {
                         return None;
                     }
-
-                    let add_pos = sf::Vector2f::new(*x as f32, *y as f32);
-
-                    if self.raw_polygon.is_some() {
-                        // Assert minimal length of the new edge
-                        if !self.entered_correct_vertex_region {
-                            for i in 1..(self.raw_polygon.as_ref().unwrap().points_count() - 1) {
-                                if distance(&add_pos, &self.raw_polygon.as_ref().unwrap().points[i]) <= POLY_EDGE_MIN_LEN {
-                                    return None;
-                                }
-                            }
-                        }
-
-                        // If a polygon already exists, there must be at least 2 vertices inside
-                        let first = self.raw_polygon.as_ref().unwrap().first_point().unwrap();
-
-                        if self.entered_correct_vertex_region  {
-                            if self.raw_polygon.as_ref().unwrap().points_count() > 3 {
-                                // If this condition is met, adding a new polygon is finished
-
-                                // Change the position of the last vertex (cursor vertex)
-                                self.raw_polygon.as_mut().unwrap().update_last_point(first).unwrap();
-
-                                // Deactivate the builder
-                                self.active = false;
-                                self.clear_draw_flags();
-
-                                // Build the PolygonObject
-                                let poly = std::mem::replace(&mut self.raw_polygon, None);
-                                return Some(PolygonObject::from(poly.unwrap().to_owned()));
-                            }
-
-                            // Prevent from putting all of the points in the same place
-                            return None;
-                        }
-                    }
-                    self.add(add_pos);
                 }
-            },
-            sf::Event::MouseButtonReleased { button: _, x: _, y: _ } => {
-                self.left_btn_pressed = false;
-            },
-            _ => (),
+            }
+
+            // If a polygon already exists, there must be at least 2 vertices inside
+            let first = self.raw_polygon.as_ref().unwrap().first_point().unwrap();
+
+            if self.entered_correct_vertex_region  {
+                if self.raw_polygon.as_ref().unwrap().points_count() > 3 {
+                    // If this condition is met, adding a new polygon is finished
+
+                    // Change the position of the last vertex (cursor vertex)
+                    self.raw_polygon.as_mut().unwrap().update_last_point(first).unwrap();
+
+                    // Deactivate the builder
+                    self.active = false;
+                    self.clear_draw_flags();
+
+                    // Build the PolygonObject
+                    let poly = std::mem::replace(&mut self.raw_polygon, None);
+                    return Some(PolygonObject::from(poly.unwrap().to_owned()));
+                }
+
+                // Prevent from putting all of the points in the same place
+                return None;
+            }
         }
+        self.add(add_pos);
 
         None
     }
