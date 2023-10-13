@@ -1,3 +1,5 @@
+use std::any::Any;
+use std::ops::Deref;
 use std::time::Instant;
 use egui_sfml::{
     egui,
@@ -5,6 +7,7 @@ use egui_sfml::{
 };
 
 use sfml::graphics::RenderTarget;
+use crate::state_machine::{IdleState, State};
 
 pub mod sf {
     pub use sfml::graphics::*;
@@ -13,6 +16,7 @@ pub mod sf {
 }
 
 pub mod polygon;
+pub mod state_machine;
 
 const BACKGROUND_COLOR: sf::Color = sf::Color::rgb(37, 43, 72);
 
@@ -24,11 +28,20 @@ pub enum DrawingMode {
     CPUBresenhamLines,
 }
 
+pub struct AppContext<'a> {
+    polygon_builder: polygon::PolygonBuilder<'a>,
+    polygons: Vec<polygon::PolygonObject<'a>>,
+}
+
 pub struct Application<'a> {
     window: sf::RenderWindow,
     program_scale: f32,
-    polygon_builder: polygon::PolygonBuilder<'a>,
-    polygons: Vec<polygon::PolygonObject<'a>>,
+
+    // Option is required, since we are temporary taking ownership
+    // of the State, each time the transition function is called.
+    // In this application curr_state is always Some.
+    curr_state: Option<Box<dyn State>>,
+    app_ctx: AppContext<'a>,
     drawing_mode: DrawingMode,
     egui_rect: egui::Rect,
 }
@@ -49,8 +62,11 @@ impl Application<'_> {
         Application {
             window,
             program_scale,
-            polygon_builder: polygon::PolygonBuilder::new(),
-            polygons: Vec::new(),
+            curr_state: Some(Box::new(IdleState)),
+            app_ctx: AppContext {
+                polygons: Vec::new(),
+                polygon_builder: polygon::PolygonBuilder::new(),
+            },
             drawing_mode: DrawingMode::GPULines,
             egui_rect: egui::Rect::EVERYTHING,
         }
@@ -74,10 +90,10 @@ impl Application<'_> {
                 match ev {
                     sf::Event::MouseButtonPressed { button: _, x, y } =>  {
                         if !self.egui_rect.contains(egui::Pos2::new(x as f32, y as f32)) {
-                            self.handle_events(&ev);
+                            self.handle_input(&ev);
                         }
                     },
-                    _ => self.handle_events(&ev),
+                    _ => self.handle_input(&ev),
                 }
 
             }
@@ -128,37 +144,55 @@ impl Application<'_> {
             .into();
         ctx.set_style(style);
     }
-
-
-    fn handle_events(&mut self, ev: &sf::Event) {
-        let poly_opt = self.polygon_builder.update_input_or_build(ev);
-        if let Some(poly) = poly_opt {
-            self.polygons.push(poly);
+    fn handle_input(&mut self, ev: &sf::Event) {
+        match ev {
+            sf::Event::MouseButtonPressed { button: btn, x, y } => {
+                if *btn == sfml::window::mouse::Button::Left {
+                    println!("LM clicked");
+                    self.curr_state = Some(self.curr_state.take().unwrap().on_left_mouse_clicked(
+                        sf::Vector2f::new(*x as f32, *y as f32),
+                        &mut self.app_ctx
+                    ));
+                }
+            },
+            sf::Event::MouseButtonReleased { button: btn, x, y } => {
+                if *btn == sfml::window::mouse::Button::Left {
+                    println!("LM released");
+                }
+            },
+            _ => (),
         }
     }
 
     fn update(&mut self, dt: f32) {
-        self.polygon_builder.update(dt, &self.window);
+        self.curr_state.as_mut().unwrap().update(
+            dt,
+            sf::Vector2f::new(
+                self.window.mouse_position().x as f32,
+                self.window.mouse_position().y as f32,
+            ),
+            &mut self.app_ctx,
+        );
     }
 
     fn render(&mut self) {
         match self.drawing_mode {
             DrawingMode::GPULines => {
-                for poly in &self.polygons {
+                for poly in &self.app_ctx.polygons {
                     poly.raw_polygon().draw_as_lines(&mut self.window);
                 }
 
-                match self.polygon_builder.raw_polygon() {
+                match self.app_ctx.polygon_builder.raw_polygon() {
                     Some(&ref poly) => poly.draw_as_lines(&mut self.window),
                     None => (),
                 }
             },
             DrawingMode::GPUThickLines => {
-                for poly in &self.polygons {
+                for poly in &self.app_ctx.polygons {
                     poly.raw_polygon().draw_as_quads(&mut self.window);
                 }
 
-                match self.polygon_builder.raw_polygon() {
+                match self.app_ctx.polygon_builder.raw_polygon() {
                     Some(&ref poly) => poly.draw_as_quads(&mut self.window),
                     None => (),
                 }
@@ -166,16 +200,16 @@ impl Application<'_> {
             DrawingMode::CPUBresenhamLines => () // TODO
         };
 
-        for poly in &self.polygons {
+        for poly in &self.app_ctx.polygons {
             poly.raw_polygon().draw_points_circles(&mut self.window);
         }
 
-        match self.polygon_builder.raw_polygon() {
+        match self.app_ctx.polygon_builder.raw_polygon() {
             Some(&ref poly) => poly.draw_points_circles(&mut self.window),
             None => (),
         }
 
-        self.polygon_builder.draw(&mut self.window);
+        self.app_ctx.polygon_builder.draw(&mut self.window);
     }
 
     fn render_egui(&mut self, ctx: &egui::Context) {
@@ -196,18 +230,11 @@ impl Application<'_> {
                 });
 
             if ui.button("Add a polygon").clicked() {
-                self.polygon_builder.start();
+                self.curr_state = Some(self.curr_state.take().unwrap().on_add_btn(&mut self.app_ctx));
             }
 
-            if !self.polygon_builder.is_active() {
-                ui.add(
-                    egui::Button::new("Cancel")
-                        .fill(egui::Color32::from_rgb(36,36,36)),
-                );
-            } else {
-                if ui.button("Cancel").clicked() {
-                    self.polygon_builder.start();
-                }
+            if ui.button("Cancel").clicked() {
+                self.curr_state = Some(self.curr_state.take().unwrap().on_cancel_btn(&mut self.app_ctx));
             }
         });
     }
