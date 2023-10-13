@@ -1,3 +1,5 @@
+use std::any::Any;
+use std::ops::Deref;
 use std::time::Instant;
 use egui_sfml::{
     egui,
@@ -5,6 +7,7 @@ use egui_sfml::{
 };
 
 use sfml::graphics::RenderTarget;
+use crate::state_machine::{IdleState, State};
 
 pub mod sf {
     pub use sfml::graphics::*;
@@ -33,12 +36,12 @@ pub struct AppContext<'a> {
 pub struct Application<'a> {
     window: sf::RenderWindow,
     program_scale: f32,
+    // Option is required, since we are temporary taking ownership
+    // of the State, each time the transition function is called
+    curr_state: Option<Box<dyn State>>,
     app_ctx: AppContext<'a>,
     drawing_mode: DrawingMode,
     egui_rect: egui::Rect,
-
-    // Input
-    left_mouse_clicked: bool,
 }
 
 impl Application<'_> {
@@ -57,13 +60,13 @@ impl Application<'_> {
         Application {
             window,
             program_scale,
+            curr_state: Some(Box::new(IdleState)),
             app_ctx: AppContext {
                 polygons: Vec::new(),
                 polygon_builder: polygon::PolygonBuilder::new(),
             },
             drawing_mode: DrawingMode::GPULines,
             egui_rect: egui::Rect::EVERYTHING,
-            left_mouse_clicked: false,
         }
     }
 
@@ -147,19 +150,17 @@ impl Application<'_> {
 
         match ev {
             sf::Event::MouseButtonPressed { button: btn, x, y } => {
-                if btn == sfml::window::mouse::Button::Left {
-                    if !self.left_mouse_clicked {
-                        // Click call here
-                        self.left_mouse_clicked = true;
-                    } else {
-                        // Press call here
-                    }
+                if *btn == sfml::window::mouse::Button::Left {
+                    println!("LM clicked");
+                    self.curr_state = Some(self.curr_state.take().unwrap().on_left_mouse_clicked(
+                        sf::Vector2f::new(*x as f32, *y as f32),
+                        &mut self.app_ctx
+                    ));
                 }
             },
             sf::Event::MouseButtonReleased { button: btn, x, y } => {
-                if btn == sfml::window::mouse::Button::Left {
-                    // Release call here
-                    self.left_mouse_clicked = false;
+                if *btn == sfml::window::mouse::Button::Left {
+                    println!("LM released");
                 }
             },
             _ => (),
@@ -225,11 +226,11 @@ impl Application<'_> {
                 });
 
             if ui.button("Add a polygon").clicked() {
-
+                self.curr_state = Some(self.curr_state.take().unwrap().on_add_btn(&mut self.app_ctx));
             }
 
             if ui.button("Cancel").clicked() {
-
+                self.curr_state = Some(self.curr_state.take().unwrap().on_cancel_btn(&mut self.app_ctx));
             }
         });
     }
