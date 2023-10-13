@@ -36,6 +36,9 @@ pub struct Application<'a> {
     app_ctx: AppContext<'a>,
     drawing_mode: DrawingMode,
     egui_rect: egui::Rect,
+
+    // Input
+    left_mouse_clicked: bool,
 }
 
 impl Application<'_> {
@@ -60,6 +63,7 @@ impl Application<'_> {
             },
             drawing_mode: DrawingMode::GPULines,
             egui_rect: egui::Rect::EVERYTHING,
+            left_mouse_clicked: false,
         }
     }
 
@@ -141,6 +145,25 @@ impl Application<'_> {
         //     self.polygons.push(poly);
         // }
 
+        match ev {
+            sf::Event::MouseButtonPressed { button: btn, x, y } => {
+                if btn == sfml::window::mouse::Button::Left {
+                    if !self.left_mouse_clicked {
+                        // Click call here
+                        self.left_mouse_clicked = true;
+                    } else {
+                        // Press call here
+                    }
+                }
+            },
+            sf::Event::MouseButtonReleased { button: btn, x, y } => {
+                if btn == sfml::window::mouse::Button::Left {
+                    // Release call here
+                    self.left_mouse_clicked = false;
+                }
+            },
+            _ => (),
+        }
     }
 
     fn update(&mut self, dt: f32) {
