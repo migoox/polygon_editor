@@ -4,6 +4,8 @@ use egui_sfml::{
     SfEgui,
 };
 
+use line_intersection::{LineInterval, LineRelation};
+
 use sfml::graphics::RenderTarget;
 
 pub mod sf {

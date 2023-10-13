@@ -1,10 +1,13 @@
 use std::io;
+use line_intersection::LineInterval;
 use sfml::graphics::{Drawable, Shape, Transformable};
 use super::sf;
 
 const LINE_THICKNESS: f32 = 6.0;
 const POINT_RADIUS: f32 = 5.0;
 const LINES_COLOR: sf::Color = sf::Color::WHITE;
+const LINES_COLOR_INCORRECT: sf::Color = sf::Color::RED;
+
 const POINTS_COLOR: sf::Color = sf::Color::BLUE;
 
 const POINT_DETECTION_RADIUS: f32 = 10.0;
@@ -147,7 +150,7 @@ impl<'a> Polygon<'a> {
         self.quads_vb = Self::generate_quads_vb(&self.points);
     }
 
-    pub fn update_vertex(&mut self, point: sf::Vector2f, index: usize) -> Result<(), io::Error> {
+    pub fn update_vertex(&mut self, point: sf::Vector2f, color: sf::Color, index: usize) -> Result<(), io::Error> {
         if self.points_count() <= index {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
         }
@@ -155,15 +158,15 @@ impl<'a> Polygon<'a> {
         self.points[index] = point;
         self.points_circles[index].set_position(point);
 
-        self.lines_vb.update(&[sf::Vertex::new(point, LINES_COLOR, sf::Vector2f::new(0.0, 0.0))], self.points.len() as u32 - 1);
+        self.lines_vb.update(&[sf::Vertex::new(point, color, sf::Vector2f::new(0.0, 0.0))], self.points.len() as u32 - 1);
 
         // TODO: quads_vb
 
         Ok(())
     }
 
-    pub fn update_last_vertex(&mut self, point: sf::Vector2f) -> Result<(), io::Error> {
-        self.update_vertex(point, self.points_count() - 1)
+    pub fn update_last_vertex(&mut self, point: sf::Vector2f, color: sf::Color) -> Result<(), io::Error> {
+        self.update_vertex(point, color, self.points_count() - 1)
     }
 
     pub fn first_point(&self) -> Option<sf::Vector2f> {
@@ -217,7 +220,7 @@ pub struct PolygonBuilder<'s> {
 
     left_btn_pressed: bool,
 
-    show_helper_circle: bool,
+    in_helper_circle: bool,
     helper_circle: sf::CircleShape<'s>,
 }
 
@@ -231,7 +234,7 @@ impl<'a> PolygonBuilder<'a> {
             raw_polygon: None,
             active: false,
             left_btn_pressed: false,
-            show_helper_circle: false,
+            in_helper_circle: false,
             helper_circle
         }
     }
@@ -251,7 +254,7 @@ impl<'a> PolygonBuilder<'a> {
     }
 
     fn clear_draw_flags(&mut self) {
-        self.show_helper_circle = false;
+        self.in_helper_circle = false;
     }
 
     pub fn clear(&mut self) {
@@ -286,12 +289,12 @@ impl<'a> PolygonBuilder<'a> {
                         // If a polygon already exists, there must be at least 2 vertices inside
                         let first = poly.first_point().unwrap();
 
-                        if distance(&first, &add_pos) <= POINT_DETECTION_RADIUS  {
+                        if self.in_helper_circle  {
                             if poly.points_count() > 3 {
                                 // If this condition is met, adding a new polygon is finished
 
-                                // Change the posititon of the last vertex (cursor vertex)
-                                poly.update_last_vertex(first).unwrap();
+                                // Change the position of the last vertex (cursor vertex)
+                                poly.update_last_vertex(first, LINES_COLOR).unwrap();
 
                                 // Deactivate the builder
                                 self.active = false;
@@ -338,14 +341,44 @@ impl<'a> PolygonBuilder<'a> {
                     self.helper_circle.set_fill_color(POINT_DETECTION_COLOR_INCORRECT);
                 }
 
-                self.show_helper_circle = true;
+                self.in_helper_circle = true;
                 self.helper_circle.set_position(first);
             } else {
-                self.show_helper_circle = false;
+                self.in_helper_circle = false;
             }
 
+            let line1 = geo::geometry::Line::new(
+                geo::coord!{x: poly.points[poly.points_count() - 2].x, y: poly.points[poly.points_count() - 2].y},
+                geo::coord!{x: poly.points[poly.points_count() - 1].x, y: poly.points[poly.points_count() - 1].y},
+            );
+
             // Update cursor vertex position
-            poly.update_last_vertex(m_pos).unwrap();
+            let mut intersection: bool = false;
+            if poly.points_count() > 3 {
+
+                for i in 0..(poly.points_count() - 3) {
+
+                    let line2 = geo::geometry::Line::new(
+                        geo::coord!{x: poly.points[i].x, y: poly.points[i].y},
+                        geo::coord!{x: poly.points[i + 1].x, y: poly.points[i + 1].y},
+                    );
+                    let result = geo::algorithm::line_intersection::line_intersection(
+                        line1,
+                        line2,
+                    );
+
+                    if result.is_some() {
+                        intersection = true;
+                        break;
+                    }
+                }
+
+            }
+            if intersection {
+                poly.update_last_vertex(m_pos, LINES_COLOR_INCORRECT).unwrap();
+            } else {
+                poly.update_last_vertex(m_pos, LINES_COLOR).unwrap();
+            }
         }
     }
 
@@ -354,7 +387,7 @@ impl<'a> PolygonBuilder<'a> {
     }
 
     pub fn draw(&self, target: &mut dyn sf::RenderTarget) {
-        if self.show_helper_circle {
+        if self.in_helper_circle {
             target.draw(&self.helper_circle);
         }
     }
