@@ -20,6 +20,8 @@ pub struct Polygon<'a> {
     points_circles: Vec<sf::CircleShape<'a>>,
     quads_vb: sf::VertexBuffer,
     lines_vb: sf::VertexBuffer,
+
+    edges_color: sf::Color,
 }
 
 fn distance(point1: &sf::Vector2f, point2: &sf::Vector2f) -> f32 {
@@ -35,6 +37,7 @@ impl<'a> Polygon<'a> {
             points_circles: Vec::new(),
             quads_vb: sf::VertexBuffer::new(sf::PrimitiveType::QUADS, 0, sf::VertexBufferUsage::DYNAMIC),
             lines_vb: sf::VertexBuffer::new(sf::PrimitiveType::LINE_STRIP, 0, sf::VertexBufferUsage::DYNAMIC),
+            edges_color: LINES_COLOR,
         }
 
     }
@@ -67,6 +70,7 @@ impl<'a> Polygon<'a> {
             points_circles,
             quads_vb,
             lines_vb,
+            edges_color: LINES_COLOR,
         }
     }
 
@@ -132,9 +136,6 @@ impl<'a> Polygon<'a> {
         points_circles
     }
 
-
-
-
     pub fn push_point(&mut self, point: sf::Vector2f) {
         self.points.push(point);
 
@@ -150,7 +151,7 @@ impl<'a> Polygon<'a> {
         self.quads_vb = Self::generate_quads_vb(&self.points);
     }
 
-    pub fn update_vertex(&mut self, point: sf::Vector2f, color: sf::Color, index: usize) -> Result<(), io::Error> {
+    fn update_vertex(&mut self, point: sf::Vector2f, color: sf::Color, index: usize) -> Result<(), io::Error> {
         if self.points_count() <= index {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
         }
@@ -158,16 +159,39 @@ impl<'a> Polygon<'a> {
         self.points[index] = point;
         self.points_circles[index].set_position(point);
 
-        self.lines_vb.update(&[sf::Vertex::new(point, color, sf::Vector2f::new(0.0, 0.0))], self.points.len() as u32 - 1);
+        self.lines_vb.update(&[sf::Vertex::new(point, color, sf::Vector2f::new(0.0, 0.0))], index as u32);
 
         // TODO: quads_vb
 
         Ok(())
     }
 
-    pub fn update_last_vertex(&mut self, point: sf::Vector2f, color: sf::Color) -> Result<(), io::Error> {
+    fn update_last_vertex(&mut self, point: sf::Vector2f, color: sf::Color) -> Result<(), io::Error> {
         self.update_vertex(point, color, self.points_count() - 1)
     }
+
+    pub fn update_point(&mut self, point: sf::Vector2f, index: usize) -> Result<(), io::Error> {
+        self.update_vertex(point, self.edges_color, index)
+    }
+
+    pub fn update_last_point(&mut self, point: sf::Vector2f) -> Result<(), io::Error> {
+        self.update_point(point, self.points_count() - 1)
+    }
+
+    pub fn set_edges_color(&mut self, edges_color: sf::Color) {
+        if edges_color == self.edges_color  {
+            return;
+        }
+
+        self.edges_color = edges_color;
+
+        for i in 0..self.points.len() {
+            self.lines_vb.update(&[sf::Vertex::new(self.points[i], self.edges_color, sf::Vector2f::new(0.0, 0.0))], i as u32);
+        }
+
+        // TODO: quads
+    }
+
 
     pub fn first_point(&self) -> Option<sf::Vector2f> {
         if self.points_count() > 0 {
@@ -209,6 +233,7 @@ impl<'a> Clone for Polygon<'a> {
            points_circles: self.points_circles.clone(),
            quads_vb: self.quads_vb.clone(),
            lines_vb: self.lines_vb.clone(),
+           edges_color: self.edges_color.clone(),
        }
     }
 }
@@ -218,10 +243,12 @@ pub struct PolygonBuilder<'s> {
 
     active: bool,
 
-    left_btn_pressed: bool,
-
-    in_helper_circle: bool,
     helper_circle: sf::CircleShape<'s>,
+
+    // PolygonBuilder events
+    in_helper_circle: bool,
+    is_line_intersecting: bool,
+    left_btn_pressed: bool,
 }
 
 impl<'a> PolygonBuilder<'a> {
@@ -234,6 +261,7 @@ impl<'a> PolygonBuilder<'a> {
             raw_polygon: None,
             active: false,
             left_btn_pressed: false,
+            is_line_intersecting: false,
             in_helper_circle: false,
             helper_circle
         }
@@ -278,7 +306,7 @@ impl<'a> PolygonBuilder<'a> {
                 if !self.left_btn_pressed {
                     self.left_btn_pressed = true;
 
-                    if !self.active {
+                    if !self.active || self.is_line_intersecting {
                         return None;
                     }
 
@@ -347,17 +375,17 @@ impl<'a> PolygonBuilder<'a> {
                 self.in_helper_circle = false;
             }
 
+            // Detect new line intersections
+            self.is_line_intersecting = false;
+
             let line1 = geo::geometry::Line::new(
                 geo::coord!{x: poly.points[poly.points_count() - 2].x, y: poly.points[poly.points_count() - 2].y},
                 geo::coord!{x: poly.points[poly.points_count() - 1].x, y: poly.points[poly.points_count() - 1].y},
             );
 
-            // Update cursor vertex position
-            let mut intersection: bool = false;
+            // Detect point intersections with the other lines
             if poly.points_count() > 3 {
-
                 for i in 0..(poly.points_count() - 3) {
-
                     let line2 = geo::geometry::Line::new(
                         geo::coord!{x: poly.points[i].x, y: poly.points[i].y},
                         geo::coord!{x: poly.points[i + 1].x, y: poly.points[i + 1].y},
@@ -368,16 +396,19 @@ impl<'a> PolygonBuilder<'a> {
                     );
 
                     if result.is_some() {
-                        intersection = true;
+                        self.is_line_intersecting = true;
                         break;
                     }
                 }
 
             }
-            if intersection {
-                poly.update_last_vertex(m_pos, LINES_COLOR_INCORRECT).unwrap();
+
+            // Update cursor vertex position
+            poly.update_last_point(m_pos).unwrap();
+            if self.is_line_intersecting {
+                poly.set_edges_color(LINES_COLOR_INCORRECT);
             } else {
-                poly.update_last_vertex(m_pos, LINES_COLOR).unwrap();
+                poly.set_edges_color(LINES_COLOR);
             }
         }
     }
