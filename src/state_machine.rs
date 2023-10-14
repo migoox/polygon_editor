@@ -16,9 +16,13 @@ pub struct SelectedState;
 
 impl State for IdleState {
     fn on_left_mouse_clicked(self: Box<Self>, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
-        for poly in app_ctx.polygons.iter() {
+        for poly in app_ctx.polygons.iter_mut() {
             if poly.is_point_hovered() {
-                // Selected state
+                let err = poly.select_point(poly.get_hovered_point_id());
+
+                if err.is_ok() {
+                    // return SelectedState
+                }
             }
         }
 

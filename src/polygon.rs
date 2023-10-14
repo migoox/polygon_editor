@@ -13,8 +13,7 @@ const POINTS_COLOR: sf::Color = sf::Color::rgb(247, 233, 135);
 const POINT_DETECTION_RADIUS: f32 = 10.0;
 const POINT_DETECTION_COLOR_CORRECT: sf::Color = sf::Color::rgb(100, 204, 197);
 const POINT_DETECTION_COLOR_INCORRECT: sf::Color = sf::Color::rgb(237, 123, 123);
-
-
+const POINT_SELECTED_COLOR: sf::Color = sf::Color::rgb(167, 187, 236);
 pub struct Polygon<'a> {
     points: Vec<sf::Vector2f>,
     points_circles: Vec<sf::CircleShape<'a>>,
@@ -452,6 +451,10 @@ impl<'a> PolygonBuilder<'a> {
 pub struct PolygonObject<'a> {
     raw_polygon: Polygon<'a>,
 
+    // Selection
+    selection_circles: Vec<(bool, sf::CircleShape<'a>)>,
+
+    // Hover
     point_is_hovered: bool,
     point_hovered_id: usize,
     hover_circle: sf::CircleShape<'a>,
@@ -459,11 +462,20 @@ pub struct PolygonObject<'a> {
 
 impl<'a> PolygonObject<'a> {
     pub fn from(raw: Polygon<'a>) -> PolygonObject<'a> {
+        let mut selection_circles: Vec<(bool, sf::CircleShape<'a>)> = vec![(false, sf::CircleShape::new(POINT_DETECTION_RADIUS, 20)); raw.points_count()];
+        for circle in selection_circles.iter_mut() {
+            circle.1.set_radius(POINT_DETECTION_RADIUS);
+            circle.1.set_origin(sf::Vector2f::new(POINT_DETECTION_RADIUS, POINT_DETECTION_RADIUS));
+            circle.1.set_fill_color(POINT_SELECTED_COLOR);
+        }
+
         let mut hover_circle = sf::CircleShape::new(POINT_DETECTION_RADIUS, 20);
         hover_circle.set_fill_color(POINTS_COLOR);
         hover_circle.set_origin(sf::Vector2f::new(POINT_DETECTION_RADIUS, POINT_DETECTION_RADIUS));
+
         PolygonObject {
-            raw_polygon: raw.clone(),
+            raw_polygon: raw,
+            selection_circles,
             point_is_hovered: true,
             point_hovered_id: 0,
             hover_circle,
@@ -493,13 +505,32 @@ impl<'a> PolygonObject<'a> {
         self.point_hovered_id
     }
 
-    pub fn select_point(&mut self, id: usize) {
-        // todo()!
+    pub fn select_point(&mut self, id: usize) -> Result<(), io::Error> {
+        // selection_circles.len() must always be equal to raw_polygon.points_count()
+        if id >= self.raw_polygon.points_count() {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
+        }
+
+        self.selection_circles[id].0 = true;
+        self.selection_circles[id].1.set_position(self.raw_polygon.points[id]);
+        Ok(())
+    }
+
+    pub fn deselect_points(&mut self) {
+        for selection_circle in self.selection_circles.iter_mut() {
+            selection_circle.0 = false;
+        }
     }
 
     pub fn draw(&self, target: &mut dyn RenderTarget) {
         if self.point_is_hovered {
             target.draw(&self.hover_circle);
+        }
+
+        for selection_circle in self.selection_circles.iter() {
+            if selection_circle.0 {
+                target.draw(&selection_circle.1);
+            }
         }
     }
 }
