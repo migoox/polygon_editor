@@ -1,4 +1,3 @@
-use sfml::graphics::RenderTarget;
 use sfml::system::Vector2f;
 use super::sf;
 use super::AppContext;
@@ -7,6 +6,7 @@ pub trait State {
     fn on_left_mouse_released(self: Box<Self>, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> Box<dyn State>;
     fn on_ctrl_left_mouse_clicked(self: Box<Self>, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> Box<dyn State>;
     fn on_add_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State>;
+    fn on_add_point_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State>;
     fn on_cancel_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State>;
     fn update(&mut self, dt: f32, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext);
     fn state_name(&self) -> &'static str;
@@ -18,6 +18,7 @@ pub struct SelectionState;
 pub struct DraggingState {
     prev_mouse_point: sf::Vector2f,
 }
+pub struct AddPointState;
 
 impl State for AddPolygonState {
     fn on_left_mouse_clicked(self: Box<Self>, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
@@ -33,12 +34,17 @@ impl State for AddPolygonState {
         self
     }
 
-    fn on_ctrl_left_mouse_clicked(self: Box<Self>, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> Box<dyn State>{
+    fn on_ctrl_left_mouse_clicked(self: Box<Self>, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
         self
     }
 
     fn on_add_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
         self
+    }
+
+    fn on_add_point_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
+        app_ctx.polygon_builder.cancel();
+        Box::new(AddPointState)
     }
 
     fn on_cancel_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
@@ -89,6 +95,10 @@ impl State for IdleState {
     fn on_add_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
         app_ctx.polygon_builder.start();
         Box::new(AddPolygonState)
+    }
+
+    fn on_add_point_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
+        Box::new(AddPointState)
     }
 
     fn on_cancel_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
@@ -176,7 +186,16 @@ impl State for SelectionState {
             poly.deselect_all_points();
         }
 
+        app_ctx.polygon_builder.start();
         return Box::new(AddPolygonState);
+    }
+
+    fn on_add_point_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
+        for poly in app_ctx.polygons.iter_mut() {
+            poly.deselect_all_points();
+        }
+
+        return Box::new(AddPointState);
     }
 
     fn on_cancel_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
@@ -207,8 +226,11 @@ impl State for DraggingState {
     fn on_ctrl_left_mouse_clicked(self: Box<Self>, mouse_pos: Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
         self
     }
-
     fn on_add_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
+        self
+    }
+
+    fn on_add_point_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
         self
     }
 
@@ -225,5 +247,39 @@ impl State for DraggingState {
 
     fn state_name(&self) -> &'static str {
         "Dragging State"
+    }
+}
+
+impl State for AddPointState {
+    fn on_left_mouse_clicked(self: Box<Self>, mouse_pos: Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
+        self
+    }
+
+    fn on_left_mouse_released(self: Box<Self>, mouse_pos: Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
+        self
+    }
+
+    fn on_ctrl_left_mouse_clicked(self: Box<Self>, mouse_pos: Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
+        self
+    }
+
+    fn on_add_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
+        app_ctx.polygon_builder.start();
+        Box::new(AddPolygonState)
+    }
+
+    fn on_add_point_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
+        self
+    }
+
+    fn on_cancel_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
+        Box::new(IdleState)
+    }
+
+    fn update(&mut self, dt: f32, mouse_pos: Vector2f, app_ctx: &mut AppContext) {
+    }
+
+    fn state_name(&self) -> &'static str {
+        "Add Point State"
     }
 }

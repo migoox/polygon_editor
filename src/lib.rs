@@ -271,15 +271,23 @@ impl Application<'_> {
                     ui.selectable_value(&mut self.drawing_mode, DrawingMode::CPUBresenhamLines, "Bresenham Lines [CPU]");
                 });
 
+            ui.separator();
+
             if ui.button("Add a polygon").clicked() {
                 self.curr_state = Some(self.curr_state.take().unwrap().on_add_btn(&mut self.app_ctx));
             }
 
+            if ui.button("Add a point").clicked() {
+                self.curr_state = Some(self.curr_state.take().unwrap().on_add_point_btn(&mut self.app_ctx));
+            }
+
+            ui.separator();
+
+            ui.label(format!("State: {}",  self.curr_state.as_ref().unwrap().state_name()));
+
             if ui.button("Cancel").clicked() {
                 self.curr_state = Some(self.curr_state.take().unwrap().on_cancel_btn(&mut self.app_ctx));
             }
-
-            ui.label(format!("State: {}",  self.curr_state.as_ref().unwrap().state_name()));
         });
     }
 }

@@ -459,6 +459,10 @@ pub struct PolygonObject<'a> {
     point_is_hovered: bool,
     point_hovered_id: usize,
     hover_circle: sf::CircleShape<'a>,
+
+    // Insert
+    show_insert: bool,
+    insert_circle: sf::CircleShape<'a>,
 }
 
 impl<'a> PolygonObject<'a> {
@@ -474,13 +478,19 @@ impl<'a> PolygonObject<'a> {
         hover_circle.set_fill_color(POINTS_COLOR);
         hover_circle.set_origin(sf::Vector2f::new(POINT_DETECTION_RADIUS, POINT_DETECTION_RADIUS));
 
+        let mut insert_circle = sf::CircleShape::new(POINT_DETECTION_RADIUS, 20);
+        insert_circle.set_fill_color(POINT_DETECTION_COLOR_CORRECT);
+        insert_circle.set_origin(sf::Vector2f::new(POINT_DETECTION_RADIUS, POINT_DETECTION_RADIUS));
+
         PolygonObject {
             raw_polygon: raw,
             selection_circles,
-            point_is_hovered: true,
+            point_is_hovered: false,
             point_hovered_id: 0,
             hover_circle,
             selected_points_count: 0,
+            insert_circle,
+            show_insert: false,
         }
     }
     pub fn raw_polygon(&self) -> &Polygon {
