@@ -453,6 +453,7 @@ pub struct PolygonObject<'a> {
 
     // Selection
     selection_circles: Vec<(bool, sf::CircleShape<'a>)>,
+    selected_points_count: usize,
 
     // Hover
     point_is_hovered: bool,
@@ -479,6 +480,7 @@ impl<'a> PolygonObject<'a> {
             point_is_hovered: true,
             point_hovered_id: 0,
             hover_circle,
+            selected_points_count: 0,
         }
     }
     pub fn raw_polygon(&self) -> &Polygon {
@@ -511,15 +513,48 @@ impl<'a> PolygonObject<'a> {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
         }
 
+        if self.selection_circles[id].0 {
+            return Ok(());
+        }
+
+        self.selected_points_count += 1;
         self.selection_circles[id].0 = true;
         self.selection_circles[id].1.set_position(self.raw_polygon.points[id]);
         Ok(())
     }
 
-    pub fn deselect_points(&mut self) {
+    pub fn is_point_selected(&self, id: usize) -> Result<bool, io::Error> {
+         // selection_circles.len() must always be equal to raw_polygon.points_count()
+        if id >= self.raw_polygon.points_count() {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
+        }
+
+        Ok(self.selection_circles[id].0)
+    }
+
+    pub fn deselect_all_points(&mut self) {
         for selection_circle in self.selection_circles.iter_mut() {
             selection_circle.0 = false;
         }
+        self.selected_points_count = 0;
+    }
+
+    pub fn selected_points_count(&self) -> usize {
+        self.selected_points_count
+    }
+    pub fn deselect_point(&mut self, id: usize) -> Result<(), io::Error> {
+         // selection_circles.len() must always be equal to raw_polygon.points_count()
+        if id >= self.raw_polygon.points_count() {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
+        }
+
+        if !self.selection_circles[id].0 {
+            return Ok(());
+        }
+
+        self.selected_points_count -= 1;
+        self.selection_circles[id].0 = false;
+        Ok(())
     }
 
     pub fn draw(&self, target: &mut dyn RenderTarget) {

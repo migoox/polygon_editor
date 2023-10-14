@@ -204,6 +204,7 @@ impl Application<'_> {
             ),
             &mut self.app_ctx,
         );
+        println!("State: {}", self.curr_state.as_ref().unwrap().state_name());
     }
 
     fn render(&mut self) {
