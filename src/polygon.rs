@@ -542,8 +542,9 @@ impl<'a> PolygonObject<'a> {
     pub fn selected_points_count(&self) -> usize {
         self.selected_points_count
     }
+
     pub fn deselect_point(&mut self, id: usize) -> Result<(), io::Error> {
-         // selection_circles.len() must always be equal to raw_polygon.points_count()
+        // selection_circles.len() must always be equal to raw_polygon.points_count()
         if id >= self.raw_polygon.points_count() {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
         }
