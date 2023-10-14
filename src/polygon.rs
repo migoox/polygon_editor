@@ -520,6 +520,17 @@ impl<'a> PolygonObject<'a> {
         self.selected_points_count += 1;
         self.selection_circles[id].0 = true;
         self.selection_circles[id].1.set_position(self.raw_polygon.points[id]);
+
+        if id == 0 {
+            self.selected_points_count += 1;
+            self.selection_circles[self.raw_polygon.points_count() - 1].0 = true;
+            self.selection_circles[self.raw_polygon.points_count() - 1].1.set_position(self.raw_polygon.points[0]);
+        } else if  id == self.raw_polygon.points_count() - 1 {
+            self.selected_points_count += 1;
+            self.selection_circles[0].0 = true;
+            self.selection_circles[0].1.set_position(self.raw_polygon.points[self.raw_polygon.points_count() - 1]);
+        }
+
         Ok(())
     }
 
@@ -555,7 +566,34 @@ impl<'a> PolygonObject<'a> {
 
         self.selected_points_count -= 1;
         self.selection_circles[id].0 = false;
+
+        if id == 0 {
+            self.selected_points_count -= 1;
+            self.selection_circles[self.raw_polygon.points_count() - 1].0 = false;
+        } else if  id == self.raw_polygon.points_count() - 1 {
+            self.selected_points_count -= 1;
+            self.selection_circles[0].0 = false;
+        }
+
         Ok(())
+    }
+
+    pub fn move_selected_points(&mut self, vec: sf::Vector2f) {
+        // TODO: make it faster
+
+        self.point_is_hovered = false;
+
+        if self.selected_points_count == 0 {
+            return;
+        }
+
+        for i in 0..self.raw_polygon.points_count() {
+            if self.selection_circles[i].0 {
+                let _err = self.raw_polygon.update_point(self.raw_polygon.points[i] + vec, i);
+                self.selection_circles[i].1.set_position(self.raw_polygon.points[i]);
+            }
+        }
+
     }
 
     pub fn draw(&self, target: &mut dyn RenderTarget) {

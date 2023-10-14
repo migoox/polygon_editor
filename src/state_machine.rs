@@ -8,14 +8,16 @@ pub trait State {
     fn on_ctrl_left_mouse_clicked(self: Box<Self>, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> Box<dyn State>;
     fn on_add_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State>;
     fn on_cancel_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State>;
-    fn update(&self, dt: f32, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext);
+    fn update(&mut self, dt: f32, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext);
     fn state_name(&self) -> &'static str;
 }
 
 pub struct IdleState;
 pub struct AddPolygonState;
 pub struct SelectionState;
-pub struct DraggingState;
+pub struct DraggingState {
+    prev_mouse_point: sf::Vector2f,
+}
 
 impl State for AddPolygonState {
     fn on_left_mouse_clicked(self: Box<Self>, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
@@ -44,7 +46,7 @@ impl State for AddPolygonState {
         Box::new(IdleState)
     }
 
-    fn update(&self, dt: f32, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) {
+    fn update(&mut self, dt: f32, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) {
         app_ctx.polygon_builder.update(dt, mouse_pos);
     }
 
@@ -59,7 +61,7 @@ impl State for IdleState {
             if poly.is_point_hovered() {
                 let err = poly.select_point(poly.get_hovered_point_id());
 
-                return Box::new(DraggingState);
+                return Box::new(DraggingState { prev_mouse_point: mouse_pos });
             }
         }
 
@@ -93,7 +95,7 @@ impl State for IdleState {
         self
     }
 
-    fn update(&self, dt: f32, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) {
+    fn update(&mut self, dt: f32, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) {
         for poly in app_ctx.polygons.iter_mut() {
             poly.update_on_point_hover(mouse_pos);
         }
@@ -113,7 +115,7 @@ impl State for SelectionState {
                         poly.deselect_all_points();
                         let _err = poly.select_point(poly.get_hovered_point_id());
                     }
-                    return Box::new(DraggingState);
+                    return Box::new(DraggingState {prev_mouse_point: mouse_pos });
                 }
             } else {
                 poly.deselect_all_points();
@@ -164,7 +166,7 @@ impl State for SelectionState {
         self
     }
 
-    fn update(&self, dt: f32, mouse_pos: Vector2f, app_ctx: &mut AppContext) {
+    fn update(&mut self, dt: f32, mouse_pos: Vector2f, app_ctx: &mut AppContext) {
         for poly in app_ctx.polygons.iter_mut() {
             poly.update_on_point_hover(mouse_pos);
         }
@@ -197,7 +199,11 @@ impl State for DraggingState {
         self
     }
 
-    fn update(&self, dt: f32, mouse_pos: Vector2f, app_ctx: &mut AppContext) {
+    fn update(&mut self, dt: f32, mouse_pos: Vector2f, app_ctx: &mut AppContext) {
+        for poly in app_ctx.polygons.iter_mut() {
+            poly.move_selected_points(mouse_pos - self.prev_mouse_point);
+        }
+        self.prev_mouse_point = mouse_pos;
     }
 
     fn state_name(&self) -> &'static str {
