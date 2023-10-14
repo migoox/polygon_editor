@@ -108,19 +108,29 @@ impl State for IdleState {
 
 impl State for SelectionState {
     fn on_left_mouse_clicked(self: Box<Self>, mouse_pos: Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
-        for poly in app_ctx.polygons.iter_mut() {
-            if poly.is_point_hovered() {
-                if let Ok(is_selected) = poly.is_point_selected(poly.get_hovered_point_id()) {
+        let mut no_point_hovered = true;
+
+        for i in 0..app_ctx.polygons.len() {
+            if app_ctx.polygons[i].is_point_hovered() {
+                if let Ok(is_selected) = app_ctx.polygons[i].is_point_selected(app_ctx.polygons[i].get_hovered_point_id()) {
                     if !is_selected {
-                        poly.deselect_all_points();
-                        let _err = poly.select_point(poly.get_hovered_point_id());
+                        for j in 0..app_ctx.polygons.len() {
+                            app_ctx.polygons[j].deselect_all_points();
+                        }
+                        let id = app_ctx.polygons[i].get_hovered_point_id();
+                        let _err = app_ctx.polygons[i].select_point(id);
                     }
                     return Box::new(DraggingState {prev_mouse_point: mouse_pos });
                 }
-            } else {
-                poly.deselect_all_points();
-                return Box::new(IdleState);
+                no_point_hovered = false;
             }
+        }
+
+        if no_point_hovered {
+            for poly in app_ctx.polygons.iter_mut() {
+                poly.deselect_all_points();
+            }
+            return Box::new(IdleState);
         }
 
         self
@@ -131,6 +141,8 @@ impl State for SelectionState {
     }
 
     fn on_ctrl_left_mouse_clicked(self: Box<Self>, mouse_pos: Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
+        let mut no_point_hovered = true;
+
         for poly in app_ctx.polygons.iter_mut() {
             if poly.is_point_hovered() {
                 if let Ok(is_selected) = poly.is_point_selected(poly.get_hovered_point_id()) {
@@ -144,11 +156,16 @@ impl State for SelectionState {
                     } else {
                         let _err = poly.select_point(poly.get_hovered_point_id());
                     }
+                    no_point_hovered = false;
                 }
-            } else {
-                poly.deselect_all_points();
-                return Box::new(IdleState);
             }
+        }
+
+        if no_point_hovered {
+            for poly in app_ctx.polygons.iter_mut() {
+                poly.deselect_all_points();
+            }
+            return Box::new(IdleState);
         }
 
         self

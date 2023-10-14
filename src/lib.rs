@@ -209,7 +209,6 @@ impl Application<'_> {
             ),
             &mut self.app_ctx,
         );
-        println!("State: {}", self.curr_state.as_ref().unwrap().state_name());
     }
 
     fn render(&mut self) {
@@ -279,6 +278,8 @@ impl Application<'_> {
             if ui.button("Cancel").clicked() {
                 self.curr_state = Some(self.curr_state.take().unwrap().on_cancel_btn(&mut self.app_ctx));
             }
+
+            ui.label(format!("State: {}",  self.curr_state.as_ref().unwrap().state_name()));
         });
     }
 }
