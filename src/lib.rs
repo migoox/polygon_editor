@@ -44,6 +44,11 @@ pub struct Application<'a> {
     app_ctx: AppContext<'a>,
     drawing_mode: DrawingMode,
     egui_rect: egui::Rect,
+
+
+    // Input
+    ctrl_pressed: bool,
+    left_mouse_pressed: bool,
 }
 
 impl Application<'_> {
@@ -69,6 +74,8 @@ impl Application<'_> {
             },
             drawing_mode: DrawingMode::GPULines,
             egui_rect: egui::Rect::EVERYTHING,
+            ctrl_pressed: false,
+            left_mouse_pressed: false,
         }
     }
 
@@ -148,17 +155,39 @@ impl Application<'_> {
 
     fn handle_input(&mut self, ev: &sf::Event) {
         match ev {
+            sf::Event::KeyPressed { code: key, .. } => {
+                if *key == sfml::window::Key::LControl {
+                    self.ctrl_pressed = true;
+                }
+            },
+            sf::Event::KeyReleased { code: key, .. } => {
+                if *key == sfml::window::Key::LControl {
+                    self.ctrl_pressed = false;
+                }
+            },
             sf::Event::MouseButtonPressed { button: btn, x, y } => {
                 if *btn == sfml::window::mouse::Button::Left {
-                    println!("LM clicked");
-                    self.curr_state = Some(self.curr_state.take().unwrap().on_left_mouse_clicked(
-                        sf::Vector2f::new(*x as f32, *y as f32),
-                        &mut self.app_ctx
-                    ));
+                    self.left_mouse_pressed = true;
+                    if self.ctrl_pressed {
+                        // CTRL + LM
+                        self.curr_state = Some(self.curr_state.take().unwrap().on_ctrl_left_mouse_clicked(
+                            sf::Vector2f::new(*x as f32, *y as f32),
+                            &mut self.app_ctx
+                        ));
+                        println!("Ctrl + LM clicked");
+                    } else {
+                        // LM
+                        self.curr_state = Some(self.curr_state.take().unwrap().on_left_mouse_clicked(
+                            sf::Vector2f::new(*x as f32, *y as f32),
+                            &mut self.app_ctx
+                        ));
+                        println!("LM clicked");
+                    }
                 }
             },
             sf::Event::MouseButtonReleased { button: btn, x, y } => {
                 if *btn == sfml::window::mouse::Button::Left {
+                    self.left_mouse_pressed = false;
                     println!("LM released");
                 }
             },

@@ -1,18 +1,46 @@
-
 use sfml::graphics::RenderTarget;
+use sfml::system::Vector2f;
 use super::sf;
 use super::AppContext;
 pub trait State {
     fn on_left_mouse_clicked(self: Box<Self>, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> Box<dyn State>;
+    fn on_ctrl_left_mouse_clicked(self: Box<Self>, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> Box<dyn State>;
     fn on_add_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State>;
     fn on_cancel_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State>;
     fn update(&self, dt: f32, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext);
 }
 
-
 pub struct IdleState;
 pub struct AddPolygonState;
-pub struct SelectedState;
+pub struct SelectionState;
+
+impl State for AddPolygonState {
+    fn on_left_mouse_clicked(self: Box<Self>, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
+        let poly_opt = app_ctx.polygon_builder.add_or_build(mouse_pos);
+        if let Some(poly) = poly_opt {
+            app_ctx.polygons.push(poly);
+            return Box::new(IdleState);
+        }
+        self
+    }
+
+    fn on_ctrl_left_mouse_clicked(self: Box<Self>, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> Box<dyn State>{
+        self
+    }
+
+    fn on_add_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
+        self
+    }
+
+    fn on_cancel_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
+        app_ctx.polygon_builder.cancel();
+        Box::new(IdleState)
+    }
+
+    fn update(&self, dt: f32, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) {
+        app_ctx.polygon_builder.update(dt, mouse_pos);
+    }
+}
 
 impl State for IdleState {
     fn on_left_mouse_clicked(self: Box<Self>, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
@@ -27,6 +55,10 @@ impl State for IdleState {
         }
 
         self
+    }
+
+    fn on_ctrl_left_mouse_clicked(self: Box<Self>, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> Box<dyn State>{
+        self.on_left_mouse_clicked(mouse_pos, app_ctx)
     }
 
     fn on_add_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
@@ -45,26 +77,24 @@ impl State for IdleState {
     }
 }
 
-impl State for AddPolygonState {
-    fn on_left_mouse_clicked(self: Box<Self>, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
-        let poly_opt = app_ctx.polygon_builder.add_or_build(mouse_pos);
-        if let Some(poly) = poly_opt {
-            app_ctx.polygons.push(poly);
-            return Box::new(IdleState);
-        }
-        self
+impl State for SelectionState {
+    fn on_left_mouse_clicked(self: Box<Self>, mouse_pos: Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
+        todo!()
+    }
+
+    fn on_ctrl_left_mouse_clicked(self: Box<Self>, mouse_pos: Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
+        todo!()
     }
 
     fn on_add_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
-        self
+        todo!()
     }
 
     fn on_cancel_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
-        app_ctx.polygon_builder.cancel();
-        Box::new(IdleState)
+        todo!()
     }
 
-    fn update(&self, dt: f32, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) {
-        app_ctx.polygon_builder.update(dt, mouse_pos);
+    fn update(&self, dt: f32, mouse_pos: Vector2f, app_ctx: &mut AppContext) {
+        todo!()
     }
 }
