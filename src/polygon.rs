@@ -1,6 +1,7 @@
 use std::io;
+use egui_sfml::egui::warn_if_debug_build;
 use line_intersection::LineInterval;
-use sfml::graphics::{Drawable, Shape, Transformable};
+use sfml::graphics::{Drawable, RenderTarget, Shape, Transformable};
 use super::sf;
 
 const LINE_THICKNESS: f32 = 6.0;
@@ -309,6 +310,7 @@ impl<'a> PolygonBuilder<'a> {
     pub fn is_active(&self) -> bool {
         self.active
     }
+
     pub fn clear(&mut self) {
         let _poly = std::mem::replace(&mut self.raw_polygon, None);
         self.clear_draw_flags();
@@ -449,19 +451,55 @@ impl<'a> PolygonBuilder<'a> {
 
 pub struct PolygonObject<'a> {
     raw_polygon: Polygon<'a>,
+
+    point_is_hovered: bool,
+    point_hovered_id: usize,
+    hover_circle: sf::CircleShape<'a>,
 }
 
 impl<'a> PolygonObject<'a> {
     pub fn from(raw: Polygon<'a>) -> PolygonObject<'a> {
+        let mut hover_circle = sf::CircleShape::new(POINT_DETECTION_RADIUS, 20);
+        hover_circle.set_fill_color(POINTS_COLOR);
+        hover_circle.set_origin(sf::Vector2f::new(POINT_DETECTION_RADIUS, POINT_DETECTION_RADIUS));
         PolygonObject {
-            raw_polygon: raw.clone()
+            raw_polygon: raw.clone(),
+            point_is_hovered: true,
+            point_hovered_id: 0,
+            hover_circle,
         }
     }
     pub fn raw_polygon(&self) -> &Polygon {
         &self.raw_polygon
     }
 
-    pub fn update(&mut self, _dt: f32, mouse_pos: sf::Vector2f) {
+    pub fn update_on_point_hover(&mut self, pos: sf::Vector2f) {
+        for (id, p) in self.raw_polygon.points.iter().enumerate() {
+            if distance(&p, &pos) <= POINT_DETECTION_RADIUS {
+                self.hover_circle.set_position(p.clone());
+                self.point_hovered_id = id;
+                self.point_is_hovered = true;
+                return;
+            }
+        }
+        self.point_is_hovered = false;
+    }
 
+    pub fn is_point_hovered(&self) -> bool {
+        self.point_is_hovered
+    }
+
+    pub fn get_hovered_point_id(&self) -> usize {
+        self.point_hovered_id
+    }
+
+    pub fn select_point(&mut self, id: usize) {
+        // todo()!
+    }
+
+    pub fn draw(&self, target: &mut dyn RenderTarget) {
+        if self.point_is_hovered {
+            target.draw(&self.hover_circle);
+        }
     }
 }

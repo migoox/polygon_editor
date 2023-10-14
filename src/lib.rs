@@ -117,6 +117,7 @@ impl Application<'_> {
             self.window.display();
         }
     }
+
     fn set_egui_scale(&self, ctx: &egui::Context, scale: f32) {
         let mut style = (*ctx.style()).clone();
         style.text_styles = [
@@ -144,6 +145,7 @@ impl Application<'_> {
             .into();
         ctx.set_style(style);
     }
+
     fn handle_input(&mut self, ev: &sf::Event) {
         match ev {
             sf::Event::MouseButtonPressed { button: btn, x, y } => {
@@ -176,6 +178,7 @@ impl Application<'_> {
     }
 
     fn render(&mut self) {
+        // Draw edges of the polygons
         match self.drawing_mode {
             DrawingMode::GPULines => {
                 for poly in &self.app_ctx.polygons {
@@ -200,6 +203,7 @@ impl Application<'_> {
             DrawingMode::CPUBresenhamLines => () // TODO
         };
 
+        // Draw points of the polygons
         for poly in &self.app_ctx.polygons {
             poly.raw_polygon().draw_points_circles(&mut self.window);
         }
@@ -209,7 +213,11 @@ impl Application<'_> {
             None => (),
         }
 
+        // Draw ui elements
         self.app_ctx.polygon_builder.draw(&mut self.window);
+        for poly in &self.app_ctx.polygons {
+            poly.draw(&mut self.window);
+        }
     }
 
     fn render_egui(&mut self, ctx: &egui::Context) {

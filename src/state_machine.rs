@@ -12,9 +12,16 @@ pub trait State {
 
 pub struct IdleState;
 pub struct AddPolygonState;
+pub struct SelectedState;
 
 impl State for IdleState {
     fn on_left_mouse_clicked(self: Box<Self>, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
+        for poly in app_ctx.polygons.iter() {
+            if poly.is_point_hovered() {
+                // Selected state
+            }
+        }
+
         self
     }
 
@@ -27,7 +34,11 @@ impl State for IdleState {
         self
     }
 
-    fn update(&self, dt: f32, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) {}
+    fn update(&self, dt: f32, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) {
+        for poly in app_ctx.polygons.iter_mut() {
+            poly.update_on_point_hover(mouse_pos);
+        }
+    }
 }
 
 impl State for AddPolygonState {
