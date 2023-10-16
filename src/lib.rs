@@ -46,6 +46,7 @@ pub struct Application<'a> {
     egui_rect: egui::Rect,
 
     // Input
+    a_pressed: bool,
     ctrl_pressed: bool,
     left_mouse_pressed: bool,
 }
@@ -73,6 +74,7 @@ impl Application<'_> {
             },
             drawing_mode: DrawingMode::GPULines,
             egui_rect: egui::Rect::EVERYTHING,
+            a_pressed: false,
             ctrl_pressed: false,
             left_mouse_pressed: false,
         }
@@ -154,25 +156,38 @@ impl Application<'_> {
     fn handle_input(&mut self, ev: &sf::Event) {
         match ev {
             sf::Event::KeyPressed { code: key, .. } => {
-                if *key == sfml::window::Key::LControl {
-                    self.ctrl_pressed = true;
-                }
+                match *key {
+                    sfml::window::Key::LControl => self.ctrl_pressed = true,
+                    sfml::window::Key::A => self.a_pressed = true,
+                    _ => (),
+                };
             }
             sf::Event::KeyReleased { code: key, .. } => {
-                if *key == sfml::window::Key::LControl {
-                    self.ctrl_pressed = false;
-                }
+                match *key {
+                    sfml::window::Key::LControl => self.ctrl_pressed = false,
+                    sfml::window::Key::A => self.a_pressed = false,
+                    _ => (),
+                };
             }
             sf::Event::MouseButtonPressed { button: btn, x, y } => {
                 if *btn == sfml::window::mouse::Button::Left {
                     self.left_mouse_pressed = true;
                     if self.ctrl_pressed {
-                        // CTRL + LM
-                        self.curr_state = Some(self.curr_state.take().unwrap().on_ctrl_left_mouse_clicked(
-                            sf::Vector2f::new(*x as f32, *y as f32),
-                            &mut self.app_ctx,
-                        ));
-                        println!("Ctrl + LM clicked");
+                        if self.a_pressed {
+                            // CTRL + A + LM
+                            println!("Ctrl + A + LM clicked");
+                            self.curr_state = Some(self.curr_state.take().unwrap().on_ctrl_a_left_mouse_clicked(
+                                sf::Vector2f::new(*x as f32, *y as f32),
+                                &mut self.app_ctx,
+                            ));
+                        } else {
+                            // CTRL + LM
+                            self.curr_state = Some(self.curr_state.take().unwrap().on_ctrl_left_mouse_clicked(
+                                sf::Vector2f::new(*x as f32, *y as f32),
+                                &mut self.app_ctx,
+                            ));
+                            println!("Ctrl + LM clicked");
+                        }
                     } else {
                         // LM
                         self.curr_state = Some(self.curr_state.take().unwrap().on_left_mouse_clicked(
