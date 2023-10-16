@@ -45,7 +45,6 @@ pub struct Application<'a> {
     drawing_mode: DrawingMode,
     egui_rect: egui::Rect,
 
-
     // Input
     ctrl_pressed: bool,
     left_mouse_pressed: bool,
@@ -54,10 +53,10 @@ pub struct Application<'a> {
 impl Application<'_> {
     pub fn new() -> Application<'static> {
         let mut window = sf::RenderWindow::new(
-            (800, 600),
+            (1280, 760),
             "Polygon editor",
             sf::Style::CLOSE,
-            &Default::default()
+            &Default::default(),
         );
 
         window.set_vertical_sync_enabled(true);
@@ -95,14 +94,13 @@ impl Application<'_> {
 
                 // If mouse has been clicked do not react when it's inside of the egui window bounds
                 match ev {
-                    sf::Event::MouseButtonPressed { button: _, x, y } =>  {
+                    sf::Event::MouseButtonPressed { button: _, x, y } => {
                         if !self.egui_rect.contains(egui::Pos2::new(x as f32, y as f32)) {
                             self.handle_input(&ev);
                         }
-                    },
+                    }
                     _ => self.handle_input(&ev),
                 }
-
             }
 
             // Update
@@ -159,12 +157,12 @@ impl Application<'_> {
                 if *key == sfml::window::Key::LControl {
                     self.ctrl_pressed = true;
                 }
-            },
+            }
             sf::Event::KeyReleased { code: key, .. } => {
                 if *key == sfml::window::Key::LControl {
                     self.ctrl_pressed = false;
                 }
-            },
+            }
             sf::Event::MouseButtonPressed { button: btn, x, y } => {
                 if *btn == sfml::window::mouse::Button::Left {
                     self.left_mouse_pressed = true;
@@ -172,30 +170,29 @@ impl Application<'_> {
                         // CTRL + LM
                         self.curr_state = Some(self.curr_state.take().unwrap().on_ctrl_left_mouse_clicked(
                             sf::Vector2f::new(*x as f32, *y as f32),
-                            &mut self.app_ctx
+                            &mut self.app_ctx,
                         ));
                         println!("Ctrl + LM clicked");
                     } else {
                         // LM
                         self.curr_state = Some(self.curr_state.take().unwrap().on_left_mouse_clicked(
                             sf::Vector2f::new(*x as f32, *y as f32),
-                            &mut self.app_ctx
+                            &mut self.app_ctx,
                         ));
                         println!("LM clicked");
                     }
                 }
-            },
+            }
             sf::Event::MouseButtonReleased { button: btn, x, y } => {
                 if *btn == sfml::window::mouse::Button::Left {
                     self.left_mouse_pressed = false;
                     self.curr_state = Some(self.curr_state.take().unwrap().on_left_mouse_released(
                         sf::Vector2f::new(self.window.mouse_position().x as f32, self.window.mouse_position().y as f32),
-                        &mut self.app_ctx
+                        &mut self.app_ctx,
                     ));
                     println!("LM released");
                 }
-
-            },
+            }
             _ => (),
         }
     }
@@ -223,7 +220,7 @@ impl Application<'_> {
                     Some(&ref poly) => poly.draw_as_lines(&mut self.window),
                     None => (),
                 }
-            },
+            }
             DrawingMode::GPUThickLines => {
                 for poly in &self.app_ctx.polygons {
                     poly.raw_polygon().draw_as_quads(&mut self.window);
@@ -233,7 +230,7 @@ impl Application<'_> {
                     Some(&ref poly) => poly.draw_as_quads(&mut self.window),
                     None => (),
                 }
-            },
+            }
             DrawingMode::CPUBresenhamLines => () // TODO
         };
 
@@ -261,7 +258,7 @@ impl Application<'_> {
             // Pick the drawing method
             egui::ComboBox::from_label("Drawing method")
                 .selected_text(match self.drawing_mode {
-                   DrawingMode::GPULines => "Lines [GPU]",
+                    DrawingMode::GPULines => "Lines [GPU]",
                     DrawingMode::GPUThickLines => "Thick Lines [GPU]",
                     DrawingMode::CPUBresenhamLines => "Bresenham Lines [CPU]"
                 })
@@ -283,7 +280,7 @@ impl Application<'_> {
 
             ui.separator();
 
-            ui.label(format!("State: {}",  self.curr_state.as_ref().unwrap().state_name()));
+            ui.label(format!("State: {}", self.curr_state.as_ref().unwrap().state_name()));
 
             if ui.button("Cancel").clicked() {
                 self.curr_state = Some(self.curr_state.take().unwrap().on_cancel_btn(&mut self.app_ctx));

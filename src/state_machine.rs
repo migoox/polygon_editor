@@ -113,7 +113,7 @@ impl State for IdleState {
 
     fn update(&mut self, dt: f32, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) {
         for poly in app_ctx.polygons.iter_mut() {
-            poly.update_on_point_hover(mouse_pos);
+            poly.update_hover(mouse_pos);
         }
     }
 
@@ -209,7 +209,7 @@ impl State for SelectionState {
 
     fn update(&mut self, dt: f32, mouse_pos: Vector2f, app_ctx: &mut AppContext) {
         for poly in app_ctx.polygons.iter_mut() {
-            poly.update_on_point_hover(mouse_pos);
+            poly.update_hover(mouse_pos);
         }
     }
 

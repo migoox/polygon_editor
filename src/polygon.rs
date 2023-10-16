@@ -1,11 +1,9 @@
 use std::io;
-use egui_sfml::egui::warn_if_debug_build;
-use geo::Intersects;
-use line_intersection::LineInterval;
 use sfml::graphics::{Drawable, RenderTarget, Shape, Transformable};
 use super::sf;
 
 const LINE_THICKNESS: f32 = 6.0;
+const LINE_DETECTION_DISTANCE: f32 = 3.0;
 const POINT_RADIUS: f32 = 5.0;
 const LINES_COLOR: sf::Color = sf::Color::rgb(180, 180, 179);
 const LINES_COLOR_INCORRECT: sf::Color = sf::Color::rgb(237, 123, 123);
@@ -29,6 +27,22 @@ fn distance(point1: &sf::Vector2f, point2: &sf::Vector2f) -> f32 {
     let dx = point1.x - point2.x;
     let dy = point1.y - point2.y;
     (dx * dx + dy * dy).sqrt()
+}
+
+fn vec_len(vec: &sf::Vector2f) -> f32 {
+    (vec.x * vec.x + vec.y * vec.y).sqrt()
+}
+
+fn vec_len2(vec: &sf::Vector2f) -> f32 {
+    (vec.x * vec.x + vec.y * vec.y)
+}
+
+fn vec_norm(vec: &sf::Vector2f) -> sf::Vector2f {
+    *vec / vec_len(vec)
+}
+
+fn dot_prod(vec1: &sf::Vector2f, vec2: &sf::Vector2f) -> f32 {
+    vec1.x * vec2.x + vec1.y * vec2.y
 }
 
 impl<'a> Polygon<'a> {
@@ -494,10 +508,16 @@ pub struct PolygonObject<'a> {
     selection: Vec<(bool, sf::CircleShape<'a>)>,
     selected_points_count: usize,
 
-    // Hover
-    point_is_hovered: bool,
-    point_hovered_id: usize,
+    // Point hover
+    is_point_hovered: bool,
+    hovered_point_id: usize,
     hover_circle: sf::CircleShape<'a>,
+
+    // Line hover
+    is_line_hovered: bool,
+    // First point of the line is considered to be line_id
+    hovered_line_id: usize,
+    hover_quad: sf::ConvexShape<'a>,
 
     // Insert
     show_insert: bool,
@@ -517,6 +537,9 @@ impl<'a> PolygonObject<'a> {
         hover_circle.set_fill_color(POINTS_COLOR);
         hover_circle.set_origin(sf::Vector2f::new(POINT_DETECTION_RADIUS, POINT_DETECTION_RADIUS));
 
+        let mut hover_quad = sf::ConvexShape::new(4);
+        hover_quad.set_fill_color(POINTS_COLOR);
+
         let mut insert_circle = sf::CircleShape::new(POINT_DETECTION_RADIUS, 20);
         insert_circle.set_fill_color(POINT_DETECTION_COLOR_CORRECT);
         insert_circle.set_origin(sf::Vector2f::new(POINT_DETECTION_RADIUS, POINT_DETECTION_RADIUS));
@@ -524,32 +547,78 @@ impl<'a> PolygonObject<'a> {
         PolygonObject {
             raw_polygon: raw,
             selection,
-            point_is_hovered: false,
-            point_hovered_id: 0,
+            is_point_hovered: false,
+            hovered_point_id: 0,
             hover_circle,
             selected_points_count: 0,
             insert_circle,
             show_insert: false,
+            hover_quad,
+            hovered_line_id: 0,
+            is_line_hovered: false,
         }
     }
     pub fn raw_polygon(&self) -> &Polygon {
         &self.raw_polygon
     }
 
-    pub fn update_on_point_hover(&mut self, pos: sf::Vector2f) {
+    fn update_on_point_hover(&mut self, pos: sf::Vector2f) {
         for (id, p) in self.raw_polygon.points.iter().enumerate() {
             if distance(&p, &pos) <= POINT_DETECTION_RADIUS {
                 self.hover_circle.set_position(p.clone());
-                self.point_hovered_id = id;
-                self.point_is_hovered = true;
+                self.hovered_point_id = id;
+                self.is_point_hovered = true;
                 return;
             }
         }
-        self.point_is_hovered = false;
+        self.is_point_hovered = false;
+    }
+
+    fn update_on_line_hover(&mut self, pos: sf::Vector2f) {
+        for i in 0..(self.raw_polygon.points_count() - 1) {
+            let v01 = self.raw_polygon.points[i + 1] - self.raw_polygon.points[i];
+            let v0m = pos - self.raw_polygon.points[i];
+
+            if dot_prod(&v01, &v0m) < 0.0 {
+                continue;
+            }
+
+            let proj1 = v01 * (dot_prod(&v01, &v0m) / vec_len2(&v01));
+
+            if vec_len2(&proj1) > vec_len2(&v01) {
+                continue;
+            }
+
+            let proj2 = v0m - proj1;
+
+            let dist = vec_len(&proj2);
+
+            if dist < LINE_DETECTION_DISTANCE {
+                let proj_norm = vec_norm(&proj2);
+
+                self.hover_quad.set_point(0, self.raw_polygon.points[i] + proj_norm * LINE_DETECTION_DISTANCE);
+                self.hover_quad.set_point(1, self.raw_polygon.points[i + 1] + proj_norm * LINE_DETECTION_DISTANCE);
+                self.hover_quad.set_point(2, self.raw_polygon.points[i + 1] - proj_norm * LINE_DETECTION_DISTANCE);
+                self.hover_quad.set_point(3, self.raw_polygon.points[i] - proj_norm * LINE_DETECTION_DISTANCE);
+                self.hovered_line_id = i;
+                self.is_line_hovered = true;
+                return;
+            }
+        }
+        self.is_line_hovered = false;
+    }
+
+    pub fn update_hover(&mut self, mouse_pos: sf::Vector2f) {
+        self.update_on_point_hover(mouse_pos);
+        if self.is_point_hovered {
+            self.is_line_hovered = false;
+        } else {
+            self.update_on_line_hover(mouse_pos);
+        }
     }
 
     pub fn is_point_hovered(&self) -> bool {
-        self.point_is_hovered
+        self.is_point_hovered
     }
 
     pub fn assert_ccw(&mut self) {
@@ -560,7 +629,7 @@ impl<'a> PolygonObject<'a> {
     }
 
     pub fn get_hovered_point_id(&self) -> usize {
-        self.point_hovered_id
+        self.hovered_point_id
     }
 
     pub fn select_point(&mut self, id: usize) -> Result<(), io::Error> {
@@ -637,7 +706,7 @@ impl<'a> PolygonObject<'a> {
     pub fn move_selected_points(&mut self, vec: sf::Vector2f) {
         // TODO: make it faster
 
-        self.point_is_hovered = false;
+        self.is_point_hovered = false;
 
         if self.selected_points_count == 0 {
             return;
@@ -652,7 +721,11 @@ impl<'a> PolygonObject<'a> {
     }
 
     pub fn draw(&self, target: &mut dyn RenderTarget) {
-        if self.point_is_hovered {
+        if self.is_line_hovered {
+            target.draw(&self.hover_quad);
+        }
+
+        if self.is_point_hovered {
             target.draw(&self.hover_circle);
         }
 
