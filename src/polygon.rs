@@ -689,7 +689,13 @@ impl<'a> PolygonObject<'a> {
         }
         self.selected_points_count = 0;
     }
-
+    pub fn select_all_points(&mut self) {
+        for (id, selection_circle) in self.selection.iter_mut().enumerate() {
+            selection_circle.0 = true;
+            selection_circle.1.set_position(self.raw_polygon.points[id]);
+        }
+        self.selected_points_count = self.raw_polygon.points_count();
+    }
     pub fn selected_points_count(&self) -> usize {
         self.selected_points_count
     }

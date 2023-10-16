@@ -126,6 +126,12 @@ impl State for IdleState {
     }
 
     fn on_ctrl_a_left_mouse_clicked(self: Box<Self>, mouse_pos: Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
+        for poly in app_ctx.polygons.iter_mut() {
+            if poly.is_line_hovered() || poly.is_point_hovered() {
+                poly.select_all_points();
+                return Box::new(SelectionState);
+            }
+        }
         self
     }
 
@@ -155,7 +161,7 @@ impl State for IdleState {
 
 impl State for SelectionState {
     fn on_left_mouse_clicked(self: Box<Self>, mouse_pos: Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
-        let mut no_point_hovered = true;
+        let mut nothing_hovered = true;
 
         for i in 0..app_ctx.polygons.len() {
             if app_ctx.polygons[i].is_point_hovered() {
@@ -169,7 +175,7 @@ impl State for SelectionState {
                     }
                     return Box::new(DraggingState { prev_mouse_point: mouse_pos, start_mouse_point: mouse_pos });
                 }
-                no_point_hovered = false;
+                nothing_hovered = false;
             } else if app_ctx.polygons[i].is_line_hovered() {
                 if let Ok(is_selected) = app_ctx.polygons[i].is_line_selected(app_ctx.polygons[i].get_hovered_line_ids().0) {
                     if !is_selected {
@@ -182,11 +188,11 @@ impl State for SelectionState {
                     }
                     return Box::new(DraggingState { prev_mouse_point: mouse_pos, start_mouse_point: mouse_pos });
                 }
-                no_point_hovered = false;
+                nothing_hovered = false;
             }
         }
 
-        if no_point_hovered {
+        if nothing_hovered {
             for poly in app_ctx.polygons.iter_mut() {
                 poly.deselect_all_points();
             }
@@ -201,7 +207,7 @@ impl State for SelectionState {
     }
 
     fn on_ctrl_left_mouse_clicked(self: Box<Self>, mouse_pos: Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
-        let mut no_point_hovered = true;
+        let mut nothing_hovered = true;
 
         for poly in app_ctx.polygons.iter_mut() {
             if poly.is_point_hovered() {
@@ -215,7 +221,7 @@ impl State for SelectionState {
                     } else {
                         let _err = poly.select_point(poly.get_hovered_point_id());
                     }
-                    no_point_hovered = false;
+                    nothing_hovered = false;
                 }
             } else if poly.is_line_hovered() {
                 let line = poly.get_hovered_line_ids();
@@ -231,12 +237,12 @@ impl State for SelectionState {
                         let _err = poly.select_point(line.0);
                         let _err = poly.select_point(line.1);
                     }
-                    no_point_hovered = false;
+                    nothing_hovered = false;
                 }
             }
         }
 
-        if no_point_hovered {
+        if nothing_hovered {
             for poly in app_ctx.polygons.iter_mut() {
                 poly.deselect_all_points();
             }
@@ -247,6 +253,20 @@ impl State for SelectionState {
     }
 
     fn on_ctrl_a_left_mouse_clicked(self: Box<Self>, mouse_pos: Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
+        let mut nothing_hovered = true;
+
+        for poly in app_ctx.polygons.iter_mut() {
+            if poly.is_line_hovered() || poly.is_point_hovered() {
+                poly.select_all_points();
+                nothing_hovered = false;
+            }
+        }
+
+        if nothing_hovered {
+            for poly in app_ctx.polygons.iter_mut() {
+                poly.deselect_all_points();
+            }
+        }
         self
     }
 

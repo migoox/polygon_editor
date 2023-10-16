@@ -175,11 +175,11 @@ impl Application<'_> {
                     if self.ctrl_pressed {
                         if self.a_pressed {
                             // CTRL + A + LM
-                            println!("Ctrl + A + LM clicked");
                             self.curr_state = Some(self.curr_state.take().unwrap().on_ctrl_a_left_mouse_clicked(
                                 sf::Vector2f::new(*x as f32, *y as f32),
                                 &mut self.app_ctx,
                             ));
+                            println!("Ctrl + A + LM clicked");
                         } else {
                             // CTRL + LM
                             self.curr_state = Some(self.curr_state.take().unwrap().on_ctrl_left_mouse_clicked(
