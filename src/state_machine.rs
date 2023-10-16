@@ -1,3 +1,4 @@
+use std::ops::Add;
 use sfml::system::Vector2f;
 use super::sf;
 use super::AppContext;
@@ -16,23 +17,78 @@ pub trait State {
 
 pub struct IdleState;
 
+impl IdleState {
+    pub fn new(app_ctx: &mut AppContext) -> IdleState {
+        for poly in app_ctx.polygons.iter_mut() {
+            poly.enable_hover()
+        }
+
+        IdleState
+    }
+}
+
 pub struct AddPolygonState;
 
+impl AddPolygonState {
+    pub fn new(app_ctx: &mut AppContext) -> AddPolygonState {
+        for poly in app_ctx.polygons.iter_mut() {
+            poly.disable_hover()
+        }
+        app_ctx.polygon_builder.start();
+
+        AddPolygonState
+    }
+}
+
 pub struct SelectionState;
+
+impl SelectionState {
+    pub fn new(app_ctx: &mut AppContext) -> SelectionState {
+        for poly in app_ctx.polygons.iter_mut() {
+            poly.enable_hover()
+        }
+
+        SelectionState
+    }
+}
 
 pub struct DraggingState {
     prev_mouse_point: sf::Vector2f,
     start_mouse_point: sf::Vector2f,
 }
 
+impl DraggingState {
+    pub fn new(mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> DraggingState {
+        for poly in app_ctx.polygons.iter_mut() {
+            poly.disable_hover()
+        }
+
+        DraggingState {
+            prev_mouse_point: mouse_pos,
+            start_mouse_point: mouse_pos,
+        }
+    }
+}
+
+
 pub struct AddPointState;
+
+impl AddPointState {
+    pub fn new(app_ctx: &mut AppContext) -> AddPointState {
+        for poly in app_ctx.polygons.iter_mut() {
+            poly.enable_hover()
+        }
+
+        AddPointState
+    }
+}
 
 impl State for AddPolygonState {
     fn on_left_mouse_clicked(self: Box<Self>, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
         let poly_opt = app_ctx.polygon_builder.add_or_build(mouse_pos);
         if let Some(poly) = poly_opt {
             app_ctx.polygons.push(poly);
-            return Box::new(IdleState);
+            return Box::new(IdleState::new(app_ctx));
         }
         self
     }
@@ -55,12 +111,12 @@ impl State for AddPolygonState {
 
     fn on_add_point_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
         app_ctx.polygon_builder.cancel();
-        Box::new(AddPointState)
+        Box::new(AddPointState::new(app_ctx))
     }
 
     fn on_cancel_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
         app_ctx.polygon_builder.cancel();
-        Box::new(IdleState)
+        Box::new(IdleState::new(app_ctx))
     }
 
     fn update(&mut self, dt: f32, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) {
@@ -103,13 +159,11 @@ impl IdleState {
 
 impl State for IdleState {
     fn on_left_mouse_clicked(self: Box<Self>, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
+        let result = Box::new(DraggingState::new(mouse_pos, app_ctx));
         self.select_points_and_return_state(
             mouse_pos,
             app_ctx,
-            Box::new(DraggingState {
-                start_mouse_point: mouse_pos,
-                prev_mouse_point: mouse_pos,
-            }),
+            result,
         )
     }
 
@@ -118,10 +172,11 @@ impl State for IdleState {
     }
 
     fn on_ctrl_left_mouse_clicked(self: Box<Self>, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
+        let result = Box::new(SelectionState::new(app_ctx));
         self.select_points_and_return_state(
             mouse_pos,
             app_ctx,
-            Box::new(SelectionState),
+            result,
         )
     }
 
@@ -129,19 +184,18 @@ impl State for IdleState {
         for poly in app_ctx.polygons.iter_mut() {
             if poly.is_line_hovered() || poly.is_point_hovered() {
                 poly.select_all_points();
-                return Box::new(SelectionState);
+                return Box::new(SelectionState::new(app_ctx));
             }
         }
         self
     }
 
     fn on_add_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
-        app_ctx.polygon_builder.start();
-        Box::new(AddPolygonState)
+        Box::new(AddPolygonState::new(app_ctx))
     }
 
     fn on_add_point_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
-        Box::new(AddPointState)
+        Box::new(AddPointState::new(app_ctx))
     }
 
     fn on_cancel_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
@@ -173,7 +227,7 @@ impl State for SelectionState {
                         let id = app_ctx.polygons[i].get_hovered_point_id();
                         let _err = app_ctx.polygons[i].select_point(id);
                     }
-                    return Box::new(DraggingState { prev_mouse_point: mouse_pos, start_mouse_point: mouse_pos });
+                    return Box::new(DraggingState::new(mouse_pos, app_ctx));
                 }
                 nothing_hovered = false;
             } else if app_ctx.polygons[i].is_line_hovered() {
@@ -186,7 +240,7 @@ impl State for SelectionState {
                         let _err = app_ctx.polygons[i].select_point(line.0);
                         let _err = app_ctx.polygons[i].select_point(line.1);
                     }
-                    return Box::new(DraggingState { prev_mouse_point: mouse_pos, start_mouse_point: mouse_pos });
+                    return Box::new(DraggingState::new(mouse_pos, app_ctx));
                 }
                 nothing_hovered = false;
             }
@@ -196,7 +250,7 @@ impl State for SelectionState {
             for poly in app_ctx.polygons.iter_mut() {
                 poly.deselect_all_points();
             }
-            return Box::new(IdleState);
+            return Box::new(IdleState::new(app_ctx));
         }
 
         self
@@ -216,7 +270,7 @@ impl State for SelectionState {
                         let _err = poly.deselect_point(poly.get_hovered_point_id());
 
                         if poly.selected_points_count() == 0 {
-                            return Box::new(IdleState);
+                            return Box::new(IdleState::new(app_ctx));
                         }
                     } else {
                         let _err = poly.select_point(poly.get_hovered_point_id());
@@ -231,7 +285,7 @@ impl State for SelectionState {
                         let _err = poly.deselect_point(line.1);
 
                         if poly.selected_points_count() == 0 {
-                            return Box::new(IdleState);
+                            return Box::new(IdleState::new(app_ctx));
                         }
                     } else {
                         let _err = poly.select_point(line.0);
@@ -246,7 +300,7 @@ impl State for SelectionState {
             for poly in app_ctx.polygons.iter_mut() {
                 poly.deselect_all_points();
             }
-            return Box::new(IdleState);
+            return Box::new(IdleState::new(app_ctx));
         }
 
         self
@@ -275,8 +329,7 @@ impl State for SelectionState {
             poly.deselect_all_points();
         }
 
-        app_ctx.polygon_builder.start();
-        return Box::new(AddPolygonState);
+        return Box::new(AddPolygonState::new(app_ctx));
     }
 
     fn on_add_point_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
@@ -284,7 +337,7 @@ impl State for SelectionState {
             poly.deselect_all_points();
         }
 
-        return Box::new(AddPointState);
+        return Box::new(AddPointState::new(app_ctx));
     }
 
     fn on_cancel_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
@@ -312,12 +365,11 @@ impl State for DraggingState {
             if poly.raw_polygon().is_self_crossing() {
                 // Revert changes
                 poly.move_selected_points(self.start_mouse_point - mouse_pos);
-                println!("self_crossing");
             } else {
                 poly.assert_ccw();
             }
         }
-        Box::new(SelectionState)
+        Box::new(SelectionState::new(app_ctx))
     }
 
     fn on_ctrl_left_mouse_clicked(self: Box<Self>, mouse_pos: Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
@@ -370,8 +422,7 @@ impl State for AddPointState {
     }
 
     fn on_add_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
-        app_ctx.polygon_builder.start();
-        Box::new(AddPolygonState)
+        Box::new(AddPolygonState::new(app_ctx))
     }
 
     fn on_add_point_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
@@ -379,7 +430,7 @@ impl State for AddPointState {
     }
 
     fn on_cancel_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
-        Box::new(IdleState)
+        Box::new(IdleState::new(app_ctx))
     }
 
     fn update(&mut self, dt: f32, mouse_pos: Vector2f, app_ctx: &mut AppContext) {}

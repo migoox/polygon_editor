@@ -508,6 +508,7 @@ pub struct PolygonObject<'a> {
     selection: Vec<(bool, sf::CircleShape<'a>)>,
     selected_points_count: usize,
 
+    is_hover_disabled: bool,
     // Point hover
     is_point_hovered: bool,
     hovered_point_id: usize,
@@ -547,6 +548,7 @@ impl<'a> PolygonObject<'a> {
         PolygonObject {
             raw_polygon: raw,
             selection,
+            is_hover_disabled: false,
             is_point_hovered: false,
             hovered_point_id: 0,
             hover_circle,
@@ -617,6 +619,15 @@ impl<'a> PolygonObject<'a> {
         }
     }
 
+    pub fn is_hover_disabled(&self) -> bool {
+        self.is_hover_disabled
+    }
+    pub fn disable_hover(&mut self) {
+        self.is_hover_disabled = true;
+    }
+    pub fn enable_hover(&mut self) {
+        self.is_hover_disabled = false;
+    }
     pub fn is_point_hovered(&self) -> bool {
         self.is_point_hovered
     }
@@ -725,10 +736,6 @@ impl<'a> PolygonObject<'a> {
     }
 
     pub fn move_selected_points(&mut self, vec: sf::Vector2f) {
-        // TODO: these 2 lines are ugly
-        self.is_point_hovered = false;
-        self.is_line_hovered = false;
-
         if self.selected_points_count == 0 {
             return;
         }
@@ -743,12 +750,14 @@ impl<'a> PolygonObject<'a> {
     }
 
     pub fn draw(&self, target: &mut dyn RenderTarget) {
-        if self.is_line_hovered {
-            target.draw(&self.hover_quad);
-        }
+        if !self.is_hover_disabled {
+            if self.is_line_hovered {
+                target.draw(&self.hover_quad);
+            }
 
-        if self.is_point_hovered {
-            target.draw(&self.hover_circle);
+            if self.is_point_hovered {
+                target.draw(&self.hover_circle);
+            }
         }
 
         for selection_circle in self.selection.iter() {
