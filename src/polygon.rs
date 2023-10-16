@@ -1,5 +1,6 @@
 use std::io;
 use egui_sfml::egui::warn_if_debug_build;
+use geo::Intersects;
 use line_intersection::LineInterval;
 use sfml::graphics::{Drawable, RenderTarget, Shape, Transformable};
 use super::sf;
@@ -14,6 +15,7 @@ const POINT_DETECTION_RADIUS: f32 = 10.0;
 const POINT_DETECTION_COLOR_CORRECT: sf::Color = sf::Color::rgb(100, 204, 197);
 const POINT_DETECTION_COLOR_INCORRECT: sf::Color = sf::Color::rgb(237, 123, 123);
 const POINT_SELECTED_COLOR: sf::Color = sf::Color::rgb(167, 187, 236);
+
 pub struct Polygon<'a> {
     points: Vec<sf::Vector2f>,
     points_circles: Vec<sf::CircleShape<'a>>,
@@ -38,7 +40,6 @@ impl<'a> Polygon<'a> {
             lines_vb: sf::VertexBuffer::new(sf::PrimitiveType::LINE_STRIP, 0, sf::VertexBufferUsage::DYNAMIC),
             edges_color: LINES_COLOR,
         }
-
     }
 
     pub fn new_with_start_point(point: sf::Vector2f) -> Polygon<'a> {
@@ -91,11 +92,11 @@ impl<'a> Polygon<'a> {
     }
 
     fn generate_quads_vb(points: &Vec<sf::Vector2f>) -> sf::VertexBuffer {
-        let mut vertices: Vec<sf::Vertex> = Vec::with_capacity(points.len()*4);
+        let mut vertices: Vec<sf::Vertex> = Vec::with_capacity(points.len() * 4);
 
         for i in 0..(points.len() - 1) {
             let p0p1 = points[i + 1] - points[i];
-            let p0p1_len = (p0p1.x*p0p1.x + p0p1.y*p0p1.y).sqrt();
+            let p0p1_len = (p0p1.x * p0p1.x + p0p1.y * p0p1.y).sqrt();
             let p0p1 = p0p1 / p0p1_len;
 
             let perp_cw = sf::Vector2f::new(p0p1.y, -p0p1.x);
@@ -175,7 +176,7 @@ impl<'a> Polygon<'a> {
     }
 
     pub fn set_edges_color(&mut self, edges_color: sf::Color) {
-        if edges_color == self.edges_color  {
+        if edges_color == self.edges_color {
             return;
         }
 
@@ -204,17 +205,55 @@ impl<'a> Polygon<'a> {
         return false;
     }
 
+    pub fn is_self_crossing(&self) -> bool {
+        for i in 0..(self.points_count() - 2) {
+            let line1 = geo::geometry::Line::new(
+                geo::coord! {x: self.points[i].x, y: self.points[i].y},
+                geo::coord! {x: self.points[i + 1].x, y: self.points[i + 1].y},
+            );
+
+            let mut end = self.points_count() - 1;
+            if i == 0 {
+                end = self.points_count() - 2;
+            }
+
+            // Do not check neighbor lines
+            for j in (i + 2)..end {
+                let line2 = geo::geometry::Line::new(
+                    geo::coord! {x: self.points[j].x, y: self.points[j].y},
+                    geo::coord! {x: self.points[j + 1].x, y: self.points[j + 1].y},
+                );
+
+                let result = geo::algorithm::line_intersection::line_intersection(
+                    line1,
+                    line2,
+                );
+
+                if result.is_some() {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     /// This method assumes, that first and the last element of the points are the same
-    /// (polygon has to be a proper polygon)
-    pub fn assert_ccw(&mut self) {
+    /// (polygon has to be a proper polygon). If points order has been reversed, returns true.
+    fn assert_ccw(&mut self) -> bool {
         let mut sum: f32 = 0.;
         for i in 0..(self.points.len() - 1) {
-            sum += (self.points[i + 1].x - self.points[i].x)*(self.points[i + 1].y + self.points[i].y);
+            sum += (self.points[i + 1].x - self.points[i].x) * (self.points[i + 1].y + self.points[i].y);
         }
 
         if sum <= 0. {
             self.points.reverse();
+            self.points_circles.reverse();
+            self.lines_vb = Self::generate_lines_vb(&self.points);
+            self.quads_vb = Self::generate_quads_vb(&self.points);
+            return true;
         }
+
+        false
     }
 
     pub fn first_point(&self) -> Option<sf::Vector2f> {
@@ -252,13 +291,13 @@ impl<'a> Polygon<'a> {
 
 impl<'a> Clone for Polygon<'a> {
     fn clone(&self) -> Self {
-       Polygon {
-           points: self.points.clone(),
-           points_circles: self.points_circles.clone(),
-           quads_vb: self.quads_vb.clone(),
-           lines_vb: self.lines_vb.clone(),
-           edges_color: self.edges_color.clone(),
-       }
+        Polygon {
+            points: self.points.clone(),
+            points_circles: self.points_circles.clone(),
+            quads_vb: self.quads_vb.clone(),
+            lines_vb: self.lines_vb.clone(),
+            edges_color: self.edges_color.clone(),
+        }
     }
 }
 
@@ -285,7 +324,7 @@ impl<'a> PolygonBuilder<'a> {
             active: false,
             is_line_intersecting: false,
             entered_correct_vertex_region: false,
-            helper_circle
+            helper_circle,
         }
     }
 
@@ -343,7 +382,7 @@ impl<'a> PolygonBuilder<'a> {
             // If a polygon already exists, there must be at least 2 vertices inside
             let first = self.raw_polygon.as_ref().unwrap().first_point().unwrap();
 
-            if self.entered_correct_vertex_region  {
+            if self.entered_correct_vertex_region {
                 if self.raw_polygon.as_ref().unwrap().points_count() > 3 {
                     // If this condition is met, adding a new polygon is finished
 
@@ -404,16 +443,16 @@ impl<'a> PolygonBuilder<'a> {
             self.is_line_intersecting = false;
 
             let line1 = geo::geometry::Line::new(
-                geo::coord!{x: poly.points[poly.points_count() - 2].x, y: poly.points[poly.points_count() - 2].y},
-                geo::coord!{x: poly.points[poly.points_count() - 1].x, y: poly.points[poly.points_count() - 1].y},
+                geo::coord! {x: poly.points[poly.points_count() - 2].x, y: poly.points[poly.points_count() - 2].y},
+                geo::coord! {x: poly.points[poly.points_count() - 1].x, y: poly.points[poly.points_count() - 1].y},
             );
 
             // Detect point intersections with the other lines
             if poly.points_count() > 3 && !is_magnet_set {
                 for i in 0..(poly.points_count() - 3) {
                     let line2 = geo::geometry::Line::new(
-                        geo::coord!{x: poly.points[i].x, y: poly.points[i].y},
-                        geo::coord!{x: poly.points[i + 1].x, y: poly.points[i + 1].y},
+                        geo::coord! {x: poly.points[i].x, y: poly.points[i].y},
+                        geo::coord! {x: poly.points[i + 1].x, y: poly.points[i + 1].y},
                     );
                     let result = geo::algorithm::line_intersection::line_intersection(
                         line1,
@@ -452,7 +491,7 @@ pub struct PolygonObject<'a> {
     raw_polygon: Polygon<'a>,
 
     // Selection
-    selection_circles: Vec<(bool, sf::CircleShape<'a>)>,
+    selection: Vec<(bool, sf::CircleShape<'a>)>,
     selected_points_count: usize,
 
     // Hover
@@ -467,8 +506,8 @@ pub struct PolygonObject<'a> {
 
 impl<'a> PolygonObject<'a> {
     pub fn from(raw: Polygon<'a>) -> PolygonObject<'a> {
-        let mut selection_circles: Vec<(bool, sf::CircleShape<'a>)> = vec![(false, sf::CircleShape::new(POINT_DETECTION_RADIUS, 20)); raw.points_count()];
-        for circle in selection_circles.iter_mut() {
+        let mut selection: Vec<(bool, sf::CircleShape<'a>)> = vec![(false, sf::CircleShape::new(POINT_DETECTION_RADIUS, 20)); raw.points_count()];
+        for circle in selection.iter_mut() {
             circle.1.set_radius(POINT_DETECTION_RADIUS);
             circle.1.set_origin(sf::Vector2f::new(POINT_DETECTION_RADIUS, POINT_DETECTION_RADIUS));
             circle.1.set_fill_color(POINT_SELECTED_COLOR);
@@ -484,7 +523,7 @@ impl<'a> PolygonObject<'a> {
 
         PolygonObject {
             raw_polygon: raw,
-            selection_circles,
+            selection,
             point_is_hovered: false,
             point_hovered_id: 0,
             hover_circle,
@@ -513,48 +552,55 @@ impl<'a> PolygonObject<'a> {
         self.point_is_hovered
     }
 
+    pub fn assert_ccw(&mut self) {
+        if self.raw_polygon.assert_ccw() {
+            println!("test");
+            self.selection.reverse();
+        }
+    }
+
     pub fn get_hovered_point_id(&self) -> usize {
         self.point_hovered_id
     }
 
     pub fn select_point(&mut self, id: usize) -> Result<(), io::Error> {
-        // selection_circles.len() must always be equal to raw_polygon.points_count()
+        // selection.len() must always be equal to raw_polygon.points_count()
         if id >= self.raw_polygon.points_count() {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
         }
 
-        if self.selection_circles[id].0 {
+        if self.selection[id].0 {
             return Ok(());
         }
 
         self.selected_points_count += 1;
-        self.selection_circles[id].0 = true;
-        self.selection_circles[id].1.set_position(self.raw_polygon.points[id]);
+        self.selection[id].0 = true;
+        self.selection[id].1.set_position(self.raw_polygon.points[id]);
 
         if id == 0 {
             self.selected_points_count += 1;
-            self.selection_circles[self.raw_polygon.points_count() - 1].0 = true;
-            self.selection_circles[self.raw_polygon.points_count() - 1].1.set_position(self.raw_polygon.points[0]);
-        } else if  id == self.raw_polygon.points_count() - 1 {
+            self.selection[self.raw_polygon.points_count() - 1].0 = true;
+            self.selection[self.raw_polygon.points_count() - 1].1.set_position(self.raw_polygon.points[0]);
+        } else if id == self.raw_polygon.points_count() - 1 {
             self.selected_points_count += 1;
-            self.selection_circles[0].0 = true;
-            self.selection_circles[0].1.set_position(self.raw_polygon.points[self.raw_polygon.points_count() - 1]);
+            self.selection[0].0 = true;
+            self.selection[0].1.set_position(self.raw_polygon.points[self.raw_polygon.points_count() - 1]);
         }
 
         Ok(())
     }
 
     pub fn is_point_selected(&self, id: usize) -> Result<bool, io::Error> {
-         // selection_circles.len() must always be equal to raw_polygon.points_count()
+        // selection.len() must always be equal to raw_polygon.points_count()
         if id >= self.raw_polygon.points_count() {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
         }
 
-        Ok(self.selection_circles[id].0)
+        Ok(self.selection[id].0)
     }
 
     pub fn deselect_all_points(&mut self) {
-        for selection_circle in self.selection_circles.iter_mut() {
+        for selection_circle in self.selection.iter_mut() {
             selection_circle.0 = false;
         }
         self.selected_points_count = 0;
@@ -565,24 +611,24 @@ impl<'a> PolygonObject<'a> {
     }
 
     pub fn deselect_point(&mut self, id: usize) -> Result<(), io::Error> {
-        // selection_circles.len() must always be equal to raw_polygon.points_count()
+        // selection.len() must always be equal to raw_polygon.points_count()
         if id >= self.raw_polygon.points_count() {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
         }
 
-        if !self.selection_circles[id].0 {
+        if !self.selection[id].0 {
             return Ok(());
         }
 
         self.selected_points_count -= 1;
-        self.selection_circles[id].0 = false;
+        self.selection[id].0 = false;
 
         if id == 0 {
             self.selected_points_count -= 1;
-            self.selection_circles[self.raw_polygon.points_count() - 1].0 = false;
-        } else if  id == self.raw_polygon.points_count() - 1 {
+            self.selection[self.raw_polygon.points_count() - 1].0 = false;
+        } else if id == self.raw_polygon.points_count() - 1 {
             self.selected_points_count -= 1;
-            self.selection_circles[0].0 = false;
+            self.selection[0].0 = false;
         }
 
         Ok(())
@@ -598,12 +644,11 @@ impl<'a> PolygonObject<'a> {
         }
 
         for i in 0..self.raw_polygon.points_count() {
-            if self.selection_circles[i].0 {
+            if self.selection[i].0 {
                 let _err = self.raw_polygon.update_point(self.raw_polygon.points[i] + vec, i);
-                self.selection_circles[i].1.set_position(self.raw_polygon.points[i]);
+                self.selection[i].1.set_position(self.raw_polygon.points[i]);
             }
         }
-
     }
 
     pub fn draw(&self, target: &mut dyn RenderTarget) {
@@ -611,7 +656,7 @@ impl<'a> PolygonObject<'a> {
             target.draw(&self.hover_circle);
         }
 
-        for selection_circle in self.selection_circles.iter() {
+        for selection_circle in self.selection.iter() {
             if selection_circle.0 {
                 target.draw(&selection_circle.1);
             }
