@@ -2,8 +2,8 @@ use std::io;
 use sfml::graphics::{Drawable, RenderTarget, Shape, Transformable};
 use super::sf;
 
-const LINE_THICKNESS: f32 = 6.0;
-const LINE_DETECTION_DISTANCE: f32 = 3.0;
+const LINE_THICKNESS: f32 = 2.0;
+const LINE_DETECTION_DISTANCE: f32 = 10.0;
 const POINT_RADIUS: f32 = 5.0;
 const LINES_COLOR: sf::Color = sf::Color::rgb(180, 180, 179);
 const LINES_COLOR_INCORRECT: sf::Color = sf::Color::rgb(237, 123, 123);
@@ -596,10 +596,10 @@ impl<'a> PolygonObject<'a> {
             if dist < LINE_DETECTION_DISTANCE {
                 let proj_norm = vec_norm(&proj2);
 
-                self.hover_quad.set_point(0, self.raw_polygon.points[i] + proj_norm * LINE_DETECTION_DISTANCE);
-                self.hover_quad.set_point(1, self.raw_polygon.points[i + 1] + proj_norm * LINE_DETECTION_DISTANCE);
-                self.hover_quad.set_point(2, self.raw_polygon.points[i + 1] - proj_norm * LINE_DETECTION_DISTANCE);
-                self.hover_quad.set_point(3, self.raw_polygon.points[i] - proj_norm * LINE_DETECTION_DISTANCE);
+                self.hover_quad.set_point(0, self.raw_polygon.points[i] + proj_norm * LINE_THICKNESS / 2.);
+                self.hover_quad.set_point(1, self.raw_polygon.points[i + 1] + proj_norm * LINE_THICKNESS / 2.);
+                self.hover_quad.set_point(2, self.raw_polygon.points[i + 1] - proj_norm * LINE_THICKNESS / 2.);
+                self.hover_quad.set_point(3, self.raw_polygon.points[i] - proj_norm * LINE_THICKNESS / 2.);
                 self.hovered_line_id = i;
                 self.is_line_hovered = true;
                 return;
@@ -621,15 +621,22 @@ impl<'a> PolygonObject<'a> {
         self.is_point_hovered
     }
 
+    pub fn is_line_hovered(&self) -> bool {
+        self.is_line_hovered
+    }
+
     pub fn assert_ccw(&mut self) {
         if self.raw_polygon.assert_ccw() {
-            println!("test");
             self.selection.reverse();
         }
     }
 
     pub fn get_hovered_point_id(&self) -> usize {
         self.hovered_point_id
+    }
+
+    pub fn get_hovered_line_ids(&self) -> (usize, usize) {
+        (self.hovered_line_id, self.hovered_line_id + 1)
     }
 
     pub fn select_point(&mut self, id: usize) -> Result<(), io::Error> {
@@ -668,6 +675,14 @@ impl<'a> PolygonObject<'a> {
         Ok(self.selection[id].0)
     }
 
+    pub fn is_line_selected(&self, first_id: usize) -> Result<bool, io::Error> {
+        if first_id >= self.raw_polygon.points_count() - 1 {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
+        }
+
+        Ok(self.selection[first_id].0 && self.selection[first_id + 1].0)
+    }
+
     pub fn deselect_all_points(&mut self) {
         for selection_circle in self.selection.iter_mut() {
             selection_circle.0 = false;
@@ -704,14 +719,15 @@ impl<'a> PolygonObject<'a> {
     }
 
     pub fn move_selected_points(&mut self, vec: sf::Vector2f) {
-        // TODO: make it faster
-
+        // TODO: these 2 lines are ugly
         self.is_point_hovered = false;
+        self.is_line_hovered = false;
 
         if self.selected_points_count == 0 {
             return;
         }
 
+        // TODO: make it faster
         for i in 0..self.raw_polygon.points_count() {
             if self.selection[i].0 {
                 let _err = self.raw_polygon.update_point(self.raw_polygon.points[i] + vec, i);
