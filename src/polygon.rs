@@ -162,6 +162,21 @@ impl<'a> Polygon<'a> {
         self.quads_vb = Self::generate_quads_vb(&self.points);
     }
 
+    /// Inserts at "pos" index
+    pub fn insert_point(&mut self, pos: usize, point: sf::Vector2f) {
+        self.points.insert(pos, point);
+
+        // Push a new point circle
+        let mut new_circle = sf::CircleShape::new(POINT_RADIUS, 20);
+        new_circle.set_position(point);
+        new_circle.set_origin(sf::Vector2f::new(new_circle.radius(), new_circle.radius()));
+        new_circle.set_fill_color(POINTS_COLOR);
+        self.points_circles.insert(pos, new_circle);
+
+        self.lines_vb = Self::generate_lines_vb(&self.points);
+
+        self.quads_vb = Self::generate_quads_vb(&self.points);
+    }
     fn update_vertex(&mut self, point: sf::Vector2f, color: sf::Color, index: usize) -> Result<(), io::Error> {
         if self.points_count() <= index {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
@@ -508,7 +523,8 @@ pub struct PolygonObject<'a> {
     selection: Vec<(bool, sf::CircleShape<'a>)>,
     selected_points_count: usize,
 
-    is_hover_disabled: bool,
+    show_hover: bool,
+
     // Point hover
     is_point_hovered: bool,
     hovered_point_id: usize,
@@ -521,8 +537,9 @@ pub struct PolygonObject<'a> {
     hover_quad: sf::ConvexShape<'a>,
 
     // Insert
-    show_insert: bool,
+    can_insert: bool,
     insert_circle: sf::CircleShape<'a>,
+    insert_pos: sf::Vector2f,
 }
 
 impl<'a> PolygonObject<'a> {
@@ -548,20 +565,72 @@ impl<'a> PolygonObject<'a> {
         PolygonObject {
             raw_polygon: raw,
             selection,
-            is_hover_disabled: false,
+            show_hover: false,
             is_point_hovered: false,
             hovered_point_id: 0,
             hover_circle,
             selected_points_count: 0,
             insert_circle,
-            show_insert: false,
+            can_insert: false,
             hover_quad,
             hovered_line_id: 0,
             is_line_hovered: false,
+            insert_pos: sf::Vector2f::new(0.0, 0.0),
         }
     }
     pub fn raw_polygon(&self) -> &Polygon {
         &self.raw_polygon
+    }
+
+    pub fn can_insert(&self) -> bool {
+        self.can_insert
+    }
+    pub fn get_insert_pos(&self) -> sf::Vector2f {
+        self.insert_pos
+    }
+    pub fn insert_point(&mut self, id: usize, pos: sf::Vector2f) -> Result<(), io::Error> {
+        if id > self.raw_polygon.points_count() {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
+        }
+
+        self.raw_polygon.insert_point(id, pos);
+        let mut circle = sf::CircleShape::new(POINT_DETECTION_RADIUS, 20);
+        circle.set_radius(POINT_DETECTION_RADIUS);
+        circle.set_origin(sf::Vector2f::new(POINT_DETECTION_RADIUS, POINT_DETECTION_RADIUS));
+        circle.set_fill_color(POINT_SELECTED_COLOR);
+
+        self.selection.insert(id, (false, circle));
+
+        self.can_insert = false;
+        Ok(())
+    }
+
+    pub fn update_insertion(&mut self, pos: sf::Vector2f) {
+        for i in 0..(self.raw_polygon.points_count() - 1) {
+            let v01 = self.raw_polygon.points[i + 1] - self.raw_polygon.points[i];
+            let v0m = pos - self.raw_polygon.points[i];
+
+            if dot_prod(&v01, &v0m) < 0.0 {
+                continue;
+            }
+
+            let proj1 = v01 * (dot_prod(&v01, &v0m) / vec_len2(&v01));
+
+            if vec_len2(&proj1) > vec_len2(&v01) {
+                continue;
+            }
+
+            let proj2 = v0m - proj1;
+            let dist = vec_len(&proj2);
+
+            if dist < LINE_DETECTION_DISTANCE {
+                self.insert_pos = self.raw_polygon.points[i] + proj1;
+                self.insert_circle.set_position(self.insert_pos);
+                self.can_insert = true;
+                return;
+            }
+        }
+        self.can_insert = false;
     }
 
     fn update_on_point_hover(&mut self, pos: sf::Vector2f) {
@@ -619,14 +688,14 @@ impl<'a> PolygonObject<'a> {
         }
     }
 
-    pub fn is_hover_disabled(&self) -> bool {
-        self.is_hover_disabled
+    pub fn is_hover_show_disabled(&self) -> bool {
+        self.show_hover
     }
-    pub fn disable_hover(&mut self) {
-        self.is_hover_disabled = true;
+    pub fn disable_hover_show(&mut self) {
+        self.show_hover = true;
     }
-    pub fn enable_hover(&mut self) {
-        self.is_hover_disabled = false;
+    pub fn enable_hover_show(&mut self) {
+        self.show_hover = false;
     }
     pub fn is_point_hovered(&self) -> bool {
         self.is_point_hovered
@@ -750,7 +819,7 @@ impl<'a> PolygonObject<'a> {
     }
 
     pub fn draw(&self, target: &mut dyn RenderTarget) {
-        if !self.is_hover_disabled {
+        if !self.show_hover {
             if self.is_line_hovered {
                 target.draw(&self.hover_quad);
             }
@@ -758,6 +827,10 @@ impl<'a> PolygonObject<'a> {
             if self.is_point_hovered {
                 target.draw(&self.hover_circle);
             }
+        }
+
+        if self.can_insert {
+            target.draw(&self.insert_circle);
         }
 
         for selection_circle in self.selection.iter() {

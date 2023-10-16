@@ -20,7 +20,7 @@ pub struct IdleState;
 impl IdleState {
     pub fn new(app_ctx: &mut AppContext) -> IdleState {
         for poly in app_ctx.polygons.iter_mut() {
-            poly.enable_hover()
+            poly.enable_hover_show()
         }
 
         IdleState
@@ -32,7 +32,7 @@ pub struct AddPolygonState;
 impl AddPolygonState {
     pub fn new(app_ctx: &mut AppContext) -> AddPolygonState {
         for poly in app_ctx.polygons.iter_mut() {
-            poly.disable_hover()
+            poly.disable_hover_show()
         }
         app_ctx.polygon_builder.start();
 
@@ -45,7 +45,7 @@ pub struct SelectionState;
 impl SelectionState {
     pub fn new(app_ctx: &mut AppContext) -> SelectionState {
         for poly in app_ctx.polygons.iter_mut() {
-            poly.enable_hover()
+            poly.enable_hover_show()
         }
 
         SelectionState
@@ -60,7 +60,7 @@ pub struct DraggingState {
 impl DraggingState {
     pub fn new(mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> DraggingState {
         for poly in app_ctx.polygons.iter_mut() {
-            poly.disable_hover()
+            poly.disable_hover_show()
         }
 
         DraggingState {
@@ -76,7 +76,7 @@ pub struct AddPointState;
 impl AddPointState {
     pub fn new(app_ctx: &mut AppContext) -> AddPointState {
         for poly in app_ctx.polygons.iter_mut() {
-            poly.enable_hover()
+            poly.disable_hover_show()
         }
 
         AddPointState
@@ -406,6 +406,13 @@ impl State for DraggingState {
 
 impl State for AddPointState {
     fn on_left_mouse_clicked(self: Box<Self>, mouse_pos: Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
+        for poly in app_ctx.polygons.iter_mut() {
+            if poly.can_insert() {
+                let line = poly.get_hovered_line_ids();
+                let _err = poly.insert_point(line.1, poly.get_insert_pos());
+                return Box::new(IdleState::new(app_ctx));
+            }
+        }
         self
     }
 
@@ -433,7 +440,12 @@ impl State for AddPointState {
         Box::new(IdleState::new(app_ctx))
     }
 
-    fn update(&mut self, dt: f32, mouse_pos: Vector2f, app_ctx: &mut AppContext) {}
+    fn update(&mut self, dt: f32, mouse_pos: Vector2f, app_ctx: &mut AppContext) {
+        for poly in app_ctx.polygons.iter_mut() {
+            poly.update_insertion(mouse_pos);
+            poly.update_hover(mouse_pos);
+        }
+    }
 
     fn state_name(&self) -> &'static str {
         "Add Point State"
