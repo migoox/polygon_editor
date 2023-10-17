@@ -174,9 +174,17 @@ impl<'a> Polygon<'a> {
         self.points_circles.insert(pos, new_circle);
 
         self.lines_vb = Self::generate_lines_vb(&self.points);
-
         self.quads_vb = Self::generate_quads_vb(&self.points);
     }
+
+
+    pub fn remove_point(&mut self, id: usize) {
+        self.points.remove(id);
+        self.points_circles.remove(id);
+        self.lines_vb = Self::generate_lines_vb(&self.points);
+        self.quads_vb = Self::generate_quads_vb(&self.points);
+    }
+
     fn update_vertex(&mut self, point: sf::Vector2f, color: sf::Color, index: usize) -> Result<(), io::Error> {
         if self.points_count() <= index {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
@@ -536,7 +544,7 @@ pub struct PolygonObject<'a> {
     hovered_line_id: usize,
     hover_quad: sf::ConvexShape<'a>,
 
-    // Insert
+    // Insert/remove
     can_insert: bool,
     insert_circle: sf::CircleShape<'a>,
     insert_pos: sf::Vector2f,
@@ -561,6 +569,10 @@ impl<'a> PolygonObject<'a> {
         let mut insert_circle = sf::CircleShape::new(POINT_DETECTION_RADIUS, 20);
         insert_circle.set_fill_color(POINT_DETECTION_COLOR_CORRECT);
         insert_circle.set_origin(sf::Vector2f::new(POINT_DETECTION_RADIUS, POINT_DETECTION_RADIUS));
+
+        let mut remove_circle = sf::CircleShape::new(POINT_DETECTION_RADIUS, 20);
+        remove_circle.set_fill_color(POINT_DETECTION_COLOR_INCORRECT);
+        remove_circle.set_origin(sf::Vector2f::new(POINT_DETECTION_RADIUS, POINT_DETECTION_RADIUS));
 
         PolygonObject {
             raw_polygon: raw,
@@ -600,13 +612,41 @@ impl<'a> PolygonObject<'a> {
         circle.set_fill_color(POINT_SELECTED_COLOR);
 
         self.selection.insert(id, (false, circle));
-
         self.can_insert = false;
+        Ok(())
+    }
+
+    pub fn remove_point(&mut self, id: usize) -> Result<(), io::Error> {
+        if id > self.raw_polygon.points_count() {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
+        }
+
+        if self.raw_polygon.points_count() <= 4 {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, ""));
+        }
+
+        if id == 0 || id == self.raw_polygon.points_count() - 1 {
+            self.raw_polygon.remove_point(0);
+            self.raw_polygon.remove_point(self.raw_polygon.points_count() - 1);
+            self.raw_polygon.push_point(self.raw_polygon.points[0]);
+            self.selection.remove(0);
+            self.selection.remove(self.raw_polygon.points_count() - 1);
+            self.selection.push(self.selection[0].clone());
+        } else {
+            self.raw_polygon.remove_point(id);
+            self.selection.remove(id);
+        }
+
         Ok(())
     }
 
     pub fn update_insertion(&mut self, pos: sf::Vector2f) {
         for i in 0..(self.raw_polygon.points_count() - 1) {
+            if distance(&pos, &self.raw_polygon.points[i]) <= POINT_DETECTION_RADIUS ||
+                distance(&pos, &self.raw_polygon.points[i + 1]) <= POINT_DETECTION_RADIUS {
+                continue;
+            }
+
             let v01 = self.raw_polygon.points[i + 1] - self.raw_polygon.points[i];
             let v0m = pos - self.raw_polygon.points[i];
 

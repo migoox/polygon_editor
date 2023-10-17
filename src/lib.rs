@@ -289,8 +289,8 @@ impl Application<'_> {
                 self.curr_state = Some(self.curr_state.take().unwrap().on_add_btn(&mut self.app_ctx));
             }
 
-            if ui.button("Add a point").clicked() {
-                self.curr_state = Some(self.curr_state.take().unwrap().on_add_point_btn(&mut self.app_ctx));
+            if ui.button("Edit points").clicked() {
+                self.curr_state = Some(self.curr_state.take().unwrap().on_edit_points_btn(&mut self.app_ctx));
             }
 
             ui.separator();
