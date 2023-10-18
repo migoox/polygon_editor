@@ -1,4 +1,5 @@
 use std::io;
+use std::collections::HashMap;
 use sfml::graphics::{Drawable, RenderTarget, Shape, Transformable};
 use super::sf;
 
@@ -13,6 +14,40 @@ const POINT_DETECTION_RADIUS: f32 = 10.0;
 const POINT_DETECTION_COLOR_CORRECT: sf::Color = sf::Color::rgb(100, 204, 197);
 const POINT_DETECTION_COLOR_INCORRECT: sf::Color = sf::Color::rgb(237, 123, 123);
 const POINT_SELECTED_COLOR: sf::Color = sf::Color::rgb(167, 187, 236);
+
+
+pub struct Point<'a> {
+    pos: sf::Vector2f,
+    idle_circle: sf::CircleShape<'a>,
+    selection_circle: sf::CircleShape<'a>,
+}
+
+impl<'a> Point<'a> {
+    pub fn new(pos: sf::Vector2f) -> Point<'a> {
+        let mut idle_circle = sf::CircleShape::new(POINT_RADIUS, 20);
+        idle_circle.set_position(pos);
+        idle_circle.set_origin(sf::Vector2f::new(idle_circle.radius(), idle_circle.radius()));
+        idle_circle.set_fill_color(POINTS_COLOR);
+
+        let mut selection_circle = sf::CircleShape::new(POINT_DETECTION_RADIUS, 20);
+        selection_circle.set_position(pos);
+        selection_circle.set_origin(sf::Vector2f::new(selection_circle.radius(), selection_circle.radius()));
+        selection_circle.set_fill_color(POINT_SELECTED_COLOR);
+
+        Point {
+            idle_circle,
+            pos,
+            selection_circle,
+        }
+    }
+
+    pub fn draw_selection_circle(&self, target: &mut dyn sf::RenderTarget) {
+        target.draw(&self.selection_circle);
+    }
+    pub fn draw_idle_circle(&self, target: &mut dyn sf::RenderTarget) {
+        target.draw(&self.idle_circle);
+    }
+}
 
 pub struct Polygon<'a> {
     points: Vec<sf::Vector2f>,
@@ -524,6 +559,12 @@ impl<'a> PolygonBuilder<'a> {
     }
 }
 
+pub enum EdgeConstraint {
+    None,
+    Horizontal,
+    Vertical,
+}
+
 pub struct PolygonObject<'a> {
     raw_polygon: Polygon<'a>,
 
@@ -532,6 +573,9 @@ pub struct PolygonObject<'a> {
     selected_points_count: usize,
 
     show_hover: bool,
+
+    // Constraints
+    // line_constraints: HashMap<usize, EdgeConstraint>,
 
     // Point hover
     is_point_hovered: bool,
