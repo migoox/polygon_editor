@@ -1,5 +1,5 @@
 use std::io;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use sfml::graphics::{Drawable, RenderTarget, Shape, Transformable};
 use super::sf;
 
@@ -14,7 +14,6 @@ const POINT_DETECTION_RADIUS: f32 = 10.0;
 const POINT_DETECTION_COLOR_CORRECT: sf::Color = sf::Color::rgb(100, 204, 197);
 const POINT_DETECTION_COLOR_INCORRECT: sf::Color = sf::Color::rgb(237, 123, 123);
 const POINT_SELECTED_COLOR: sf::Color = sf::Color::rgb(167, 187, 236);
-
 
 pub struct Point<'a> {
     pos: sf::Vector2f,
@@ -41,6 +40,12 @@ impl<'a> Point<'a> {
         }
     }
 
+    pub fn update_pos(&mut self, pos: sf::Vector2f) {
+        self.pos = pos;
+        self.selection_circle.set_position(pos);
+        self.idle_circle.set_position(pos);
+    }
+
     pub fn draw_selection_circle(&self, target: &mut dyn sf::RenderTarget) {
         target.draw(&self.selection_circle);
     }
@@ -49,9 +54,18 @@ impl<'a> Point<'a> {
     }
 }
 
+impl<'a> Clone for Point<'a> {
+    fn clone(&self) -> Self {
+        Point {
+            pos: self.pos.clone(),
+            idle_circle: self.idle_circle.clone(),
+            selection_circle: self.selection_circle.clone(),
+        }
+    }
+}
+
 pub struct Polygon<'a> {
-    points: Vec<sf::Vector2f>,
-    points_circles: Vec<sf::CircleShape<'a>>,
+    points: Vec<Point<'a>>,
     quads_vb: sf::VertexBuffer,
     lines_vb: sf::VertexBuffer,
 
@@ -84,7 +98,6 @@ impl<'a> Polygon<'a> {
     pub fn new() -> Polygon<'a> {
         Polygon {
             points: Vec::new(),
-            points_circles: Vec::new(),
             quads_vb: sf::VertexBuffer::new(sf::PrimitiveType::QUADS, 0, sf::VertexBufferUsage::DYNAMIC),
             lines_vb: sf::VertexBuffer::new(sf::PrimitiveType::LINE_STRIP, 0, sf::VertexBufferUsage::DYNAMIC),
             edges_color: LINES_COLOR,
@@ -102,7 +115,7 @@ impl<'a> Polygon<'a> {
     /// Polygon is proper.
     pub fn create(mut points: Vec<sf::Vector2f>) -> Polygon<'a> {
         // Create points circles
-        let points_circles = Self::generate_points_circles(&points);
+        let points = points.iter().map(|p| Point::new(p.clone())).collect();
 
         // Create lines vertex buffer
         let lines_vb = Self::generate_lines_vb(&points);
@@ -113,7 +126,6 @@ impl<'a> Polygon<'a> {
         // Return the Polygon instance
         Polygon {
             points,
-            points_circles,
             quads_vb,
             lines_vb,
             edges_color: LINES_COLOR,
@@ -124,10 +136,10 @@ impl<'a> Polygon<'a> {
         self.points.len()
     }
 
-    fn generate_lines_vb(points: &Vec<sf::Vector2f>) -> sf::VertexBuffer {
+    fn generate_lines_vb(points: &Vec<Point>) -> sf::VertexBuffer {
         let vertices: Vec<sf::Vertex> = points
             .iter()
-            .map(|&p| sf::Vertex::new(p, LINES_COLOR, sf::Vector2f::new(0., 0.)))
+            .map(|p| sf::Vertex::new(p.pos.clone(), LINES_COLOR, sf::Vector2f::new(0., 0.)))
             .collect();
 
         let mut lines_vb = sf::VertexBuffer::new(
@@ -140,21 +152,21 @@ impl<'a> Polygon<'a> {
         lines_vb
     }
 
-    fn generate_quads_vb(points: &Vec<sf::Vector2f>) -> sf::VertexBuffer {
+    fn generate_quads_vb(points: &Vec<Point>) -> sf::VertexBuffer {
         let mut vertices: Vec<sf::Vertex> = Vec::with_capacity(points.len() * 4);
 
         for i in 0..(points.len() - 1) {
-            let p0p1 = points[i + 1] - points[i];
+            let p0p1 = points[i + 1].pos - points[i].pos;
             let p0p1_len = (p0p1.x * p0p1.x + p0p1.y * p0p1.y).sqrt();
             let p0p1 = p0p1 / p0p1_len;
 
             let perp_cw = sf::Vector2f::new(p0p1.y, -p0p1.x);
             let perp_ccw = sf::Vector2f::new(-p0p1.y, p0p1.x);
 
-            vertices.push(sf::Vertex::new(perp_cw * LINE_THICKNESS / 2. + points[i], LINES_COLOR, sf::Vector2f::new(0., 0.)));
-            vertices.push(sf::Vertex::new(perp_cw * LINE_THICKNESS / 2. + points[i + 1], LINES_COLOR, sf::Vector2f::new(0., 0.)));
-            vertices.push(sf::Vertex::new(perp_ccw * LINE_THICKNESS / 2. + points[i + 1], LINES_COLOR, sf::Vector2f::new(0., 0.)));
-            vertices.push(sf::Vertex::new(perp_ccw * LINE_THICKNESS / 2. + points[i], LINES_COLOR, sf::Vector2f::new(0., 0.)));
+            vertices.push(sf::Vertex::new(perp_cw * LINE_THICKNESS / 2. + points[i].pos, LINES_COLOR, sf::Vector2f::new(0., 0.)));
+            vertices.push(sf::Vertex::new(perp_cw * LINE_THICKNESS / 2. + points[i + 1].pos, LINES_COLOR, sf::Vector2f::new(0., 0.)));
+            vertices.push(sf::Vertex::new(perp_ccw * LINE_THICKNESS / 2. + points[i + 1].pos, LINES_COLOR, sf::Vector2f::new(0., 0.)));
+            vertices.push(sf::Vertex::new(perp_ccw * LINE_THICKNESS / 2. + points[i].pos, LINES_COLOR, sf::Vector2f::new(0., 0.)));
         }
 
         // Create the vertex buffer and fill it with the vertices
@@ -182,32 +194,15 @@ impl<'a> Polygon<'a> {
         points_circles
     }
 
-    pub fn push_point(&mut self, point: sf::Vector2f) {
-        self.points.push(point);
-
-        // Push a new point circle
-        let mut new_circle = sf::CircleShape::new(POINT_RADIUS, 20);
-        new_circle.set_position(point);
-        new_circle.set_origin(sf::Vector2f::new(new_circle.radius(), new_circle.radius()));
-        new_circle.set_fill_color(POINTS_COLOR);
-        self.points_circles.push(new_circle);
-
+    pub fn push_point(&mut self, point_pos: sf::Vector2f) {
+        self.points.push(Point::new(point_pos.clone()));
         self.lines_vb = Self::generate_lines_vb(&self.points);
-
         self.quads_vb = Self::generate_quads_vb(&self.points);
     }
 
     /// Inserts at "pos" index
-    pub fn insert_point(&mut self, pos: usize, point: sf::Vector2f) {
-        self.points.insert(pos, point);
-
-        // Push a new point circle
-        let mut new_circle = sf::CircleShape::new(POINT_RADIUS, 20);
-        new_circle.set_position(point);
-        new_circle.set_origin(sf::Vector2f::new(new_circle.radius(), new_circle.radius()));
-        new_circle.set_fill_color(POINTS_COLOR);
-        self.points_circles.insert(pos, new_circle);
-
+    pub fn insert_point(&mut self, pos: usize, point_pos: sf::Vector2f) {
+        self.points.insert(pos, Point::new(point_pos.clone()));
         self.lines_vb = Self::generate_lines_vb(&self.points);
         self.quads_vb = Self::generate_quads_vb(&self.points);
     }
@@ -215,36 +210,34 @@ impl<'a> Polygon<'a> {
 
     pub fn remove_point(&mut self, id: usize) {
         self.points.remove(id);
-        self.points_circles.remove(id);
         self.lines_vb = Self::generate_lines_vb(&self.points);
         self.quads_vb = Self::generate_quads_vb(&self.points);
     }
 
-    fn update_vertex(&mut self, point: sf::Vector2f, color: sf::Color, index: usize) -> Result<(), io::Error> {
+    fn update_vertex(&mut self, point_pos: sf::Vector2f, color: sf::Color, index: usize) -> Result<(), io::Error> {
         if self.points_count() <= index {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
         }
 
-        self.points[index] = point;
-        self.points_circles[index].set_position(point);
+        self.points[index].update_pos(point_pos);
 
-        self.lines_vb.update(&[sf::Vertex::new(point, color, sf::Vector2f::new(0.0, 0.0))], index as u32);
+        self.lines_vb.update(&[sf::Vertex::new(point_pos, color, sf::Vector2f::new(0.0, 0.0))], index as u32);
 
         // TODO: quads_vb
 
         Ok(())
     }
 
-    fn update_last_vertex(&mut self, point: sf::Vector2f, color: sf::Color) -> Result<(), io::Error> {
-        self.update_vertex(point, color, self.points_count() - 1)
+    fn update_last_vertex(&mut self, point_pos: sf::Vector2f, color: sf::Color) -> Result<(), io::Error> {
+        self.update_vertex(point_pos, color, self.points_count() - 1)
     }
 
-    pub fn update_point(&mut self, point: sf::Vector2f, index: usize) -> Result<(), io::Error> {
-        self.update_vertex(point, self.edges_color, index)
+    pub fn update_point(&mut self, point_pos: sf::Vector2f, index: usize) -> Result<(), io::Error> {
+        self.update_vertex(point_pos, self.edges_color, index)
     }
 
-    pub fn update_last_point(&mut self, point: sf::Vector2f) -> Result<(), io::Error> {
-        self.update_point(point, self.points_count() - 1)
+    pub fn update_last_point(&mut self, point_pos: sf::Vector2f) -> Result<(), io::Error> {
+        self.update_point(point_pos, self.points_count() - 1)
     }
 
     pub fn set_edges_color(&mut self, edges_color: sf::Color) {
@@ -255,7 +248,7 @@ impl<'a> Polygon<'a> {
         self.edges_color = edges_color;
 
         for i in 0..self.points.len() {
-            self.lines_vb.update(&[sf::Vertex::new(self.points[i], self.edges_color, sf::Vector2f::new(0.0, 0.0))], i as u32);
+            self.lines_vb.update(&[sf::Vertex::new(self.points[i].pos, self.edges_color, sf::Vector2f::new(0.0, 0.0))], i as u32);
         }
 
         // TODO: quads
@@ -270,7 +263,7 @@ impl<'a> Polygon<'a> {
 
         // This comparison valid, since if the Polygon is proper, the last point must be
         // an exact copy of the first point
-        if self.points[0] == self.points[self.points.len() - 1] {
+        if self.points[0].pos == self.points[self.points.len() - 1].pos {
             return true;
         }
 
@@ -280,8 +273,8 @@ impl<'a> Polygon<'a> {
     pub fn is_self_crossing(&self) -> bool {
         for i in 0..(self.points_count() - 2) {
             let line1 = geo::geometry::Line::new(
-                geo::coord! {x: self.points[i].x, y: self.points[i].y},
-                geo::coord! {x: self.points[i + 1].x, y: self.points[i + 1].y},
+                geo::coord! {x: self.points[i].pos.x, y: self.points[i].pos.y},
+                geo::coord! {x: self.points[i + 1].pos.x, y: self.points[i + 1].pos.y},
             );
 
             let mut end = self.points_count() - 1;
@@ -292,8 +285,8 @@ impl<'a> Polygon<'a> {
             // Do not check neighbor lines
             for j in (i + 2)..end {
                 let line2 = geo::geometry::Line::new(
-                    geo::coord! {x: self.points[j].x, y: self.points[j].y},
-                    geo::coord! {x: self.points[j + 1].x, y: self.points[j + 1].y},
+                    geo::coord! {x: self.points[j].pos.x, y: self.points[j].pos.y},
+                    geo::coord! {x: self.points[j + 1].pos.x, y: self.points[j + 1].pos.y},
                 );
 
                 let result = geo::algorithm::line_intersection::line_intersection(
@@ -314,12 +307,11 @@ impl<'a> Polygon<'a> {
     fn assert_ccw(&mut self) -> bool {
         let mut sum: f32 = 0.;
         for i in 0..(self.points.len() - 1) {
-            sum += (self.points[i + 1].x - self.points[i].x) * (self.points[i + 1].y + self.points[i].y);
+            sum += (self.points[i + 1].pos.x - self.points[i].pos.x) * (self.points[i + 1].pos.y + self.points[i].pos.y);
         }
 
         if sum <= 0. {
             self.points.reverse();
-            self.points_circles.reverse();
             self.lines_vb = Self::generate_lines_vb(&self.points);
             self.quads_vb = Self::generate_quads_vb(&self.points);
             return true;
@@ -328,9 +320,9 @@ impl<'a> Polygon<'a> {
         false
     }
 
-    pub fn first_point(&self) -> Option<sf::Vector2f> {
+    pub fn first_point_pos(&self) -> Option<sf::Vector2f> {
         if self.points_count() > 0 {
-            return Some(self.points[0]);
+            return Some(self.points[0].pos);
         }
         None
     }
@@ -338,7 +330,6 @@ impl<'a> Polygon<'a> {
     pub fn clear(&mut self) {
         self.lines_vb = sf::VertexBuffer::new(sf::PrimitiveType::LINE_STRIP, 0, sf::VertexBufferUsage::DYNAMIC);
         self.quads_vb = sf::VertexBuffer::new(sf::PrimitiveType::QUADS, 0, sf::VertexBufferUsage::DYNAMIC);
-        self.points_circles.clear();
         self.points.clear();
     }
 
@@ -350,9 +341,9 @@ impl<'a> Polygon<'a> {
         self.lines_vb.draw(target, &Default::default());
     }
 
-    pub fn draw_points_circles(&self, target: &mut dyn sf::RenderTarget) {
-        for circle in &self.points_circles {
-            circle.draw(target, &Default::default());
+    pub fn draw_idle_circles(&self, target: &mut dyn sf::RenderTarget) {
+        for point in &self.points {
+            point.draw_idle_circle(target);
         }
     }
 
@@ -365,7 +356,6 @@ impl<'a> Clone for Polygon<'a> {
     fn clone(&self) -> Self {
         Polygon {
             points: self.points.clone(),
-            points_circles: self.points_circles.clone(),
             quads_vb: self.quads_vb.clone(),
             lines_vb: self.lines_vb.clone(),
             edges_color: self.edges_color.clone(),
@@ -445,14 +435,14 @@ impl<'a> PolygonBuilder<'a> {
             // Assert minimal length of the new edge
             if !self.entered_correct_vertex_region {
                 for i in 1..(self.raw_polygon.as_ref().unwrap().points_count() - 1) {
-                    if distance(&add_pos, &self.raw_polygon.as_ref().unwrap().points[i]) <= POLY_EDGE_MIN_LEN {
+                    if distance(&add_pos, &self.raw_polygon.as_ref().unwrap().points[i].pos) <= POLY_EDGE_MIN_LEN {
                         return None;
                     }
                 }
             }
 
             // If a polygon already exists, there must be at least 2 vertices inside
-            let first = self.raw_polygon.as_ref().unwrap().first_point().unwrap();
+            let first = self.raw_polygon.as_ref().unwrap().first_point_pos().unwrap();
 
             if self.entered_correct_vertex_region {
                 if self.raw_polygon.as_ref().unwrap().points_count() > 3 {
@@ -486,7 +476,7 @@ impl<'a> PolygonBuilder<'a> {
 
         if let Some(poly) = &mut self.raw_polygon {
             // Polygon should contain at least 2 vertices here
-            let first = poly.first_point().unwrap();
+            let first = poly.first_point_pos().unwrap();
 
             let mut m_pos = mouse_pos;
 
@@ -515,16 +505,16 @@ impl<'a> PolygonBuilder<'a> {
             self.is_line_intersecting = false;
 
             let line1 = geo::geometry::Line::new(
-                geo::coord! {x: poly.points[poly.points_count() - 2].x, y: poly.points[poly.points_count() - 2].y},
-                geo::coord! {x: poly.points[poly.points_count() - 1].x, y: poly.points[poly.points_count() - 1].y},
+                geo::coord! {x: poly.points[poly.points_count() - 2].pos.x, y: poly.points[poly.points_count() - 2].pos.y},
+                geo::coord! {x: poly.points[poly.points_count() - 1].pos.x, y: poly.points[poly.points_count() - 1].pos.y},
             );
 
             // Detect point intersections with the other lines
             if poly.points_count() > 3 && !is_magnet_set {
                 for i in 0..(poly.points_count() - 3) {
                     let line2 = geo::geometry::Line::new(
-                        geo::coord! {x: poly.points[i].x, y: poly.points[i].y},
-                        geo::coord! {x: poly.points[i + 1].x, y: poly.points[i + 1].y},
+                        geo::coord! {x: poly.points[i].pos.x, y: poly.points[i].pos.y},
+                        geo::coord! {x: poly.points[i + 1].pos.x, y: poly.points[i + 1].pos.y},
                     );
                     let result = geo::algorithm::line_intersection::line_intersection(
                         line1,
@@ -569,12 +559,13 @@ pub struct PolygonObject<'a> {
     raw_polygon: Polygon<'a>,
 
     // Selection
-    selection: Vec<(bool, sf::CircleShape<'a>)>,
-    selected_points_count: usize,
+    //selection: Vec<(bool, sf::CircleShape<'a>)>,
+    selection: HashSet<usize>,
 
     show_hover: bool,
 
     // Constraints
+
     // line_constraints: HashMap<usize, EdgeConstraint>,
 
     // Point hover
@@ -596,13 +587,6 @@ pub struct PolygonObject<'a> {
 
 impl<'a> PolygonObject<'a> {
     pub fn from(raw: Polygon<'a>) -> PolygonObject<'a> {
-        let mut selection: Vec<(bool, sf::CircleShape<'a>)> = vec![(false, sf::CircleShape::new(POINT_DETECTION_RADIUS, 20)); raw.points_count()];
-        for circle in selection.iter_mut() {
-            circle.1.set_radius(POINT_DETECTION_RADIUS);
-            circle.1.set_origin(sf::Vector2f::new(POINT_DETECTION_RADIUS, POINT_DETECTION_RADIUS));
-            circle.1.set_fill_color(POINT_SELECTED_COLOR);
-        }
-
         let mut hover_circle = sf::CircleShape::new(POINT_DETECTION_RADIUS, 20);
         hover_circle.set_fill_color(POINTS_COLOR);
         hover_circle.set_origin(sf::Vector2f::new(POINT_DETECTION_RADIUS, POINT_DETECTION_RADIUS));
@@ -620,12 +604,11 @@ impl<'a> PolygonObject<'a> {
 
         PolygonObject {
             raw_polygon: raw,
-            selection,
+            selection: HashSet::new(),
             show_hover: false,
             is_point_hovered: false,
             hovered_point_id: 0,
             hover_circle,
-            selected_points_count: 0,
             insert_circle,
             can_insert: false,
             hover_quad,
@@ -655,7 +638,6 @@ impl<'a> PolygonObject<'a> {
         circle.set_origin(sf::Vector2f::new(POINT_DETECTION_RADIUS, POINT_DETECTION_RADIUS));
         circle.set_fill_color(POINT_SELECTED_COLOR);
 
-        self.selection.insert(id, (false, circle));
         self.can_insert = false;
         Ok(())
     }
@@ -672,13 +654,14 @@ impl<'a> PolygonObject<'a> {
         if id == 0 || id == self.raw_polygon.points_count() - 1 {
             self.raw_polygon.remove_point(0);
             self.raw_polygon.remove_point(self.raw_polygon.points_count() - 1);
-            self.raw_polygon.push_point(self.raw_polygon.points[0]);
-            self.selection.remove(0);
-            self.selection.remove(self.raw_polygon.points_count() - 1);
-            self.selection.push(self.selection[0].clone());
+            self.raw_polygon.push_point(self.raw_polygon.points[0].pos);
+
+            self.selection.remove(&0);
+            self.selection.remove(&(self.raw_polygon.points_count() - 1));
+            self.selection.insert(*self.selection.get(&0).unwrap());
         } else {
             self.raw_polygon.remove_point(id);
-            self.selection.remove(id);
+            self.selection.remove(&id);
         }
 
         Ok(())
@@ -686,13 +669,13 @@ impl<'a> PolygonObject<'a> {
 
     pub fn update_insertion(&mut self, pos: sf::Vector2f) {
         for i in 0..(self.raw_polygon.points_count() - 1) {
-            if distance(&pos, &self.raw_polygon.points[i]) <= POINT_DETECTION_RADIUS ||
-                distance(&pos, &self.raw_polygon.points[i + 1]) <= POINT_DETECTION_RADIUS {
+            if distance(&pos, &self.raw_polygon.points[i].pos) <= POINT_DETECTION_RADIUS ||
+                distance(&pos, &self.raw_polygon.points[i + 1].pos) <= POINT_DETECTION_RADIUS {
                 continue;
             }
 
-            let v01 = self.raw_polygon.points[i + 1] - self.raw_polygon.points[i];
-            let v0m = pos - self.raw_polygon.points[i];
+            let v01 = self.raw_polygon.points[i + 1].pos - self.raw_polygon.points[i].pos;
+            let v0m = pos - self.raw_polygon.points[i].pos;
 
             if dot_prod(&v01, &v0m) < 0.0 {
                 continue;
@@ -708,7 +691,7 @@ impl<'a> PolygonObject<'a> {
             let dist = vec_len(&proj2);
 
             if dist < LINE_DETECTION_DISTANCE {
-                self.insert_pos = self.raw_polygon.points[i] + proj1;
+                self.insert_pos = self.raw_polygon.points[i].pos + proj1;
                 self.insert_circle.set_position(self.insert_pos);
                 self.can_insert = true;
                 return;
@@ -719,8 +702,8 @@ impl<'a> PolygonObject<'a> {
 
     fn update_on_point_hover(&mut self, pos: sf::Vector2f) {
         for (id, p) in self.raw_polygon.points.iter().enumerate() {
-            if distance(&p, &pos) <= POINT_DETECTION_RADIUS {
-                self.hover_circle.set_position(p.clone());
+            if distance(&p.pos, &pos) <= POINT_DETECTION_RADIUS {
+                self.hover_circle.set_position(p.pos.clone());
                 self.hovered_point_id = id;
                 self.is_point_hovered = true;
                 return;
@@ -731,8 +714,8 @@ impl<'a> PolygonObject<'a> {
 
     fn update_on_line_hover(&mut self, pos: sf::Vector2f) {
         for i in 0..(self.raw_polygon.points_count() - 1) {
-            let v01 = self.raw_polygon.points[i + 1] - self.raw_polygon.points[i];
-            let v0m = pos - self.raw_polygon.points[i];
+            let v01 = self.raw_polygon.points[i + 1].pos - self.raw_polygon.points[i].pos;
+            let v0m = pos - self.raw_polygon.points[i].pos;
 
             if dot_prod(&v01, &v0m) < 0.0 {
                 continue;
@@ -751,10 +734,10 @@ impl<'a> PolygonObject<'a> {
             if dist < LINE_DETECTION_DISTANCE {
                 let proj_norm = vec_norm(&proj2);
 
-                self.hover_quad.set_point(0, self.raw_polygon.points[i] + proj_norm * LINE_THICKNESS / 2.);
-                self.hover_quad.set_point(1, self.raw_polygon.points[i + 1] + proj_norm * LINE_THICKNESS / 2.);
-                self.hover_quad.set_point(2, self.raw_polygon.points[i + 1] - proj_norm * LINE_THICKNESS / 2.);
-                self.hover_quad.set_point(3, self.raw_polygon.points[i] - proj_norm * LINE_THICKNESS / 2.);
+                self.hover_quad.set_point(0, self.raw_polygon.points[i].pos + proj_norm * LINE_THICKNESS / 2.);
+                self.hover_quad.set_point(1, self.raw_polygon.points[i + 1].pos + proj_norm * LINE_THICKNESS / 2.);
+                self.hover_quad.set_point(2, self.raw_polygon.points[i + 1].pos - proj_norm * LINE_THICKNESS / 2.);
+                self.hover_quad.set_point(3, self.raw_polygon.points[i].pos - proj_norm * LINE_THICKNESS / 2.);
                 self.hovered_line_id = i;
                 self.is_line_hovered = true;
                 return;
@@ -790,9 +773,7 @@ impl<'a> PolygonObject<'a> {
     }
 
     pub fn assert_ccw(&mut self) {
-        if self.raw_polygon.assert_ccw() {
-            self.selection.reverse();
-        }
+        self.raw_polygon.assert_ccw();
     }
 
     pub fn get_hovered_point_id(&self) -> usize {
@@ -809,22 +790,11 @@ impl<'a> PolygonObject<'a> {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
         }
 
-        if self.selection[id].0 {
-            return Ok(());
-        }
-
-        self.selected_points_count += 1;
-        self.selection[id].0 = true;
-        self.selection[id].1.set_position(self.raw_polygon.points[id]);
-
-        if id == 0 {
-            self.selected_points_count += 1;
-            self.selection[self.raw_polygon.points_count() - 1].0 = true;
-            self.selection[self.raw_polygon.points_count() - 1].1.set_position(self.raw_polygon.points[0]);
-        } else if id == self.raw_polygon.points_count() - 1 {
-            self.selected_points_count += 1;
-            self.selection[0].0 = true;
-            self.selection[0].1.set_position(self.raw_polygon.points[self.raw_polygon.points_count() - 1]);
+        if id == 0 || id == self.raw_polygon.points_count() - 1 {
+            self.selection.insert(0);
+            self.selection.insert(self.raw_polygon.points_count() - 1);
+        } else {
+            self.selection.insert(id);
         }
 
         Ok(())
@@ -836,7 +806,7 @@ impl<'a> PolygonObject<'a> {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
         }
 
-        Ok(self.selection[id].0)
+        Ok(self.selection.get(&id).is_some())
     }
 
     pub fn is_line_selected(&self, first_id: usize) -> Result<bool, io::Error> {
@@ -844,24 +814,19 @@ impl<'a> PolygonObject<'a> {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
         }
 
-        Ok(self.selection[first_id].0 && self.selection[first_id + 1].0)
+        Ok(self.selection.get(&first_id).is_some() && self.selection.get(&(first_id + 1)).is_some())
     }
 
     pub fn deselect_all_points(&mut self) {
-        for selection_circle in self.selection.iter_mut() {
-            selection_circle.0 = false;
-        }
-        self.selected_points_count = 0;
+        self.selection.clear();
     }
     pub fn select_all_points(&mut self) {
-        for (id, selection_circle) in self.selection.iter_mut().enumerate() {
-            selection_circle.0 = true;
-            selection_circle.1.set_position(self.raw_polygon.points[id]);
+        for id in 0..self.raw_polygon.points_count() {
+            self.selection.insert(id);
         }
-        self.selected_points_count = self.raw_polygon.points_count();
     }
     pub fn selected_points_count(&self) -> usize {
-        self.selected_points_count
+        self.selection.len()
     }
 
     pub fn deselect_point(&mut self, id: usize) -> Result<(), io::Error> {
@@ -870,35 +835,19 @@ impl<'a> PolygonObject<'a> {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
         }
 
-        if !self.selection[id].0 {
-            return Ok(());
-        }
-
-        self.selected_points_count -= 1;
-        self.selection[id].0 = false;
-
-        if id == 0 {
-            self.selected_points_count -= 1;
-            self.selection[self.raw_polygon.points_count() - 1].0 = false;
-        } else if id == self.raw_polygon.points_count() - 1 {
-            self.selected_points_count -= 1;
-            self.selection[0].0 = false;
+        if id == 0 || id == self.raw_polygon.points_count() - 1 {
+            self.selection.remove(&0);
+            self.selection.remove(&(self.raw_polygon.points_count() - 1));
+        } else {
+            self.selection.remove(&id);
         }
 
         Ok(())
     }
 
     pub fn move_selected_points(&mut self, vec: sf::Vector2f) {
-        if self.selected_points_count == 0 {
-            return;
-        }
-
-        // TODO: make it faster
-        for i in 0..self.raw_polygon.points_count() {
-            if self.selection[i].0 {
-                let _err = self.raw_polygon.update_point(self.raw_polygon.points[i] + vec, i);
-                self.selection[i].1.set_position(self.raw_polygon.points[i]);
-            }
+        for id in self.selection.iter() {
+            let _err = self.raw_polygon.update_point(self.raw_polygon.points[*id].pos + vec, *id);
         }
     }
 
@@ -917,10 +866,8 @@ impl<'a> PolygonObject<'a> {
             target.draw(&self.insert_circle);
         }
 
-        for selection_circle in self.selection.iter() {
-            if selection_circle.0 {
-                target.draw(&selection_circle.1);
-            }
+        for id in self.selection.iter() {
+            self.raw_polygon.points[*id].draw_selection_circle(target);
         }
     }
 }
