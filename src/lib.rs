@@ -251,11 +251,11 @@ impl Application<'_> {
 
         // Draw points of the polygons
         for poly in &self.app_ctx.polygons {
-            poly.raw_polygon().draw_points_circles(&mut self.window);
+            poly.raw_polygon().draw_idle_circles(&mut self.window);
         }
 
         match self.app_ctx.polygon_builder.raw_polygon() {
-            Some(&ref poly) => poly.draw_points_circles(&mut self.window),
+            Some(&ref poly) => poly.draw_idle_circles(&mut self.window),
             None => (),
         }
 
@@ -299,6 +299,12 @@ impl Application<'_> {
 
             if ui.button("Cancel").clicked() {
                 self.curr_state = Some(self.curr_state.take().unwrap().on_cancel_btn(&mut self.app_ctx));
+            }
+
+            ui.separator();
+
+            for poly in self.app_ctx.polygons.iter_mut() {
+                poly.draw_egui(ui);
             }
         });
     }
