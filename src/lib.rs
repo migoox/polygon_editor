@@ -1,10 +1,12 @@
 use std::any::Any;
 use std::ops::Deref;
 use std::time::Instant;
+
 use egui_sfml::{
     egui,
     SfEgui,
 };
+use egui_sfml::egui::Sense;
 
 use sfml::graphics::RenderTarget;
 use crate::state_machine::{IdleState, State};
@@ -17,6 +19,10 @@ pub mod sf {
 
 pub mod polygon;
 pub mod state_machine;
+
+pub mod style;
+
+pub mod my_math;
 
 const BACKGROUND_COLOR: sf::Color = sf::Color::rgb(37, 43, 72);
 
@@ -267,45 +273,54 @@ impl Application<'_> {
     }
 
     fn render_egui(&mut self, ctx: &egui::Context) {
-        egui::Window::new("Options").show(ctx, |ui| {
-            self.egui_rect = ctx.used_rect();
+        let w_size = egui::Vec2::new(self.window.size().x as f32, self.window.size().y as f32);
 
-            // Pick the drawing method
-            egui::ComboBox::from_label("Drawing method")
-                .selected_text(match self.drawing_mode {
-                    DrawingMode::GPULines => "Lines [GPU]",
-                    DrawingMode::GPUThickLines => "Thick Lines [GPU]",
-                    DrawingMode::CPUBresenhamLines => "Bresenham Lines [CPU]"
-                })
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.drawing_mode, DrawingMode::GPULines, "Lines [GPU]");
-                    ui.selectable_value(&mut self.drawing_mode, DrawingMode::GPUThickLines, "Thick Lines [GPU]");
-                    ui.selectable_value(&mut self.drawing_mode, DrawingMode::CPUBresenhamLines, "Bresenham Lines [CPU]");
-                });
+        egui::Window::new("Options")
+            .show(ctx, |ui| {
+                self.egui_rect = ctx.used_rect();
 
-            ui.separator();
+                ui.separator();
+                ui.label("Polygons:");
+                egui::ScrollArea::vertical()
+                    .max_height(400.0)
+                    .show(ui, |ui| {
+                        for poly in self.app_ctx.polygons.iter_mut() {
+                            poly.draw_egui(ui);
+                        }
+                    });
 
-            if ui.button("Add a polygon").clicked() {
-                self.curr_state = Some(self.curr_state.take().unwrap().on_add_btn(&mut self.app_ctx));
-            }
 
-            if ui.button("Edit points").clicked() {
-                self.curr_state = Some(self.curr_state.take().unwrap().on_edit_points_btn(&mut self.app_ctx));
-            }
+                ui.separator();
+                // Pick the drawing method
+                egui::ComboBox::from_label("Drawing method")
+                    .selected_text(match self.drawing_mode {
+                        DrawingMode::GPULines => "Lines [GPU]",
+                        DrawingMode::GPUThickLines => "Thick Lines [GPU]",
+                        DrawingMode::CPUBresenhamLines => "Bresenham Lines [CPU]"
+                    })
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.drawing_mode, DrawingMode::GPULines, "Lines [GPU]");
+                        ui.selectable_value(&mut self.drawing_mode, DrawingMode::GPUThickLines, "Thick Lines [GPU]");
+                        ui.selectable_value(&mut self.drawing_mode, DrawingMode::CPUBresenhamLines, "Bresenham Lines [CPU]");
+                    });
 
-            ui.separator();
+                ui.separator();
 
-            ui.label(format!("State: {}", self.curr_state.as_ref().unwrap().state_name()));
+                if ui.button("Add a polygon").clicked() {
+                    self.curr_state = Some(self.curr_state.take().unwrap().on_add_btn(&mut self.app_ctx));
+                }
 
-            if ui.button("Cancel").clicked() {
-                self.curr_state = Some(self.curr_state.take().unwrap().on_cancel_btn(&mut self.app_ctx));
-            }
+                if ui.button("Edit points").clicked() {
+                    self.curr_state = Some(self.curr_state.take().unwrap().on_edit_points_btn(&mut self.app_ctx));
+                }
 
-            ui.separator();
+                ui.separator();
 
-            for poly in self.app_ctx.polygons.iter_mut() {
-                poly.draw_egui(ui);
-            }
-        });
+                ui.label(format!("State: {}", self.curr_state.as_ref().unwrap().state_name()));
+
+                if ui.button("Cancel").clicked() {
+                    self.curr_state = Some(self.curr_state.take().unwrap().on_cancel_btn(&mut self.app_ctx));
+                }
+            });
     }
 }
