@@ -13,7 +13,7 @@ pub enum EdgeConstraint {
 
 struct Point<'a> {
     pos: sf::Vector2f,
-    idle_circle: sf::CircleShape<'a>,
+    point_circle: sf::CircleShape<'a>,
     selection_circle: sf::CircleShape<'a>,
     is_selected: bool,
 
@@ -37,7 +37,7 @@ impl<'a> Point<'a> {
         selection_circle.set_fill_color(style::POINT_SELECTED_COLOR);
 
         Point {
-            idle_circle,
+            point_circle: idle_circle,
             pos,
             selection_circle,
             is_selected: false,
@@ -48,14 +48,14 @@ impl<'a> Point<'a> {
     pub fn update_pos(&mut self, pos: sf::Vector2f) {
         self.pos = pos;
         self.selection_circle.set_position(pos);
-        self.idle_circle.set_position(pos);
+        self.point_circle.set_position(pos);
     }
 
     pub fn draw_selection_circle(&self, target: &mut dyn sf::RenderTarget) {
         target.draw(&self.selection_circle);
     }
-    pub fn draw_idle_circle(&self, target: &mut dyn sf::RenderTarget) {
-        target.draw(&self.idle_circle);
+    pub fn draw_point_circle(&self, target: &mut dyn sf::RenderTarget) {
+        target.draw(&self.point_circle);
     }
 }
 
@@ -63,7 +63,7 @@ impl<'a> Clone for Point<'a> {
     fn clone(&self) -> Self {
         Point {
             pos: self.pos.clone(),
-            idle_circle: self.idle_circle.clone(),
+            point_circle: self.point_circle.clone(),
             selection_circle: self.selection_circle.clone(),
             is_selected: self.is_selected.clone(),
             edge_constraint: self.edge_constraint.clone(),
@@ -75,6 +75,7 @@ pub struct Polygon<'a> {
     points: Vec<Point<'a>>,
     lines_vb: sf::VertexBuffer,
     edges_color: sf::Color,
+    show_last_line: bool,
 }
 
 
@@ -84,137 +85,141 @@ impl<'a> Polygon<'a> {
             points: Vec::new(),
             lines_vb: sf::VertexBuffer::new(sf::PrimitiveType::LINE_STRIP, 0, sf::VertexBufferUsage::DYNAMIC),
             edges_color: style::LINES_COLOR,
+            show_last_line: true,
         }
     }
 
     pub fn new_with_start_point(point: sf::Vector2f) -> Polygon<'a> {
         let mut result = Self::new();
-        result.push_point(point);
+        result.push_point_with_pos(point);
 
         result
     }
-    pub fn get_point_pos(&self, id: usize) -> sf::Vector2f {
-        self.points[id].pos
-    }
 
-    /// Creates polygon from the given points. This function doesn't assert that the returned
-    /// Polygon is proper.
+    /// Creates polygon from the given points.
     pub fn create(mut points: Vec<sf::Vector2f>) -> Polygon<'a> {
-        // Create points circles
-        let points = points.iter().map(|p| Point::new(p.clone())).collect();
-
-        // Create lines vertex buffer
-        let lines_vb = Self::generate_lines_vb(&points);
+        // Create points
+        let points: Vec<Point> = points
+            .iter()
+            .map(|p| Point::new(p.clone()))
+            .collect();
 
         // Return the Polygon instance
-        Polygon {
-            points,
-            lines_vb,
-            edges_color: style::LINES_COLOR,
+        let mut result = Polygon::new();
+        result.points = points;
+        result.generate_lines_vb();
+
+        result
+    }
+
+    fn generate_lines_vb(&mut self) {
+        if self.points_count() == 0 {
+            return;
         }
+
+        let mut vertices: Vec<sf::Vertex> = self.points
+            .iter()
+            .map(|p| sf::Vertex::new(
+                p.pos.clone(),
+                style::LINES_COLOR,
+                sf::Vector2f::new(0., 0.),
+            ))
+            .collect();
+
+        let mut len = self.points_count();
+        if self.show_last_line {
+            vertices.push(sf::Vertex::new(self.points[0].pos, self.edges_color, sf::Vector2f::new(0.0, 0.0)));
+            len += 1;
+        }
+
+        self.lines_vb = sf::VertexBuffer::new(
+            sf::PrimitiveType::LINE_STRIP,
+            len as u32,
+            sf::VertexBufferUsage::DYNAMIC,
+        );
+        self.lines_vb.update(&vertices, 0);
+    }
+
+    pub fn show_last_line(&mut self, flag: bool) {
+        if self.show_last_line == flag {
+            return;
+        }
+        self.show_last_line = flag;
+        self.generate_lines_vb();
     }
 
     pub fn points_count(&self) -> usize {
-        if self.is_proper() {
-            return self.points.len() - 1;
-        }
         self.points.len()
     }
 
-    fn generate_lines_vb(points: &Vec<Point>) -> sf::VertexBuffer {
-        let vertices: Vec<sf::Vertex> = points
-            .iter()
-            .map(|p| sf::Vertex::new(p.pos.clone(), style::LINES_COLOR, sf::Vector2f::new(0., 0.)))
-            .collect();
-
-        let mut lines_vb = sf::VertexBuffer::new(
-            sf::PrimitiveType::LINE_STRIP,
-            points.len() as u32,
-            sf::VertexBufferUsage::DYNAMIC,
-        );
-        lines_vb.update(&vertices, 0);
-
-        lines_vb
+    /// Makes id cyclic.
+    pub fn fix_index(&self, id: isize) -> usize {
+        return (id.rem_euclid(self.points_count() as isize)) as usize;
     }
 
-    pub fn push_point(&mut self, point_pos: sf::Vector2f) {
-        self.points.push(Point::new(point_pos.clone()));
-        self.lines_vb = Self::generate_lines_vb(&self.points);
+    /// Returns point's position, id is cyclic.
+    pub fn get_point_pos(&self, id: isize) -> sf::Vector2f {
+        self.points[self.fix_index(id)].pos
     }
 
-    /// Inserts at "pos" index
-    pub fn insert_point(&mut self, pos: usize, point_pos: sf::Vector2f) {
-        self.points.insert(pos, Point::new(point_pos.clone()));
-        self.lines_vb = Self::generate_lines_vb(&self.points);
+
+    pub fn push_point_with_pos(&mut self, point_pos: sf::Vector2f) {
+        self.points.push(Point::new(point_pos));
+        self.generate_lines_vb();
     }
 
-    // Takes the last point in the points vector and moves it onto first element
-    pub fn move_last_to_make_proper(&mut self) {
-        if self.is_proper() {
-            return;
+    /// Inserts at "id" index. "id" is cyclic.
+    pub fn insert_point_with_pos(&mut self, id: isize, point_pos: sf::Vector2f) {
+        self.points.insert(self.fix_index(id), Point::new(point_pos));
+        self.generate_lines_vb();
+    }
+
+    /// Removes a point with the given id
+    pub fn remove_point(&mut self, id: isize) {
+        self.points.remove(self.fix_index(id));
+        self.generate_lines_vb();
+    }
+
+
+    fn update_vertex(&mut self, point_pos: sf::Vector2f, color: sf::Color, index: isize) {
+        let index = self.fix_index(index);
+
+        if self.show_last_line && index == 0 {
+            // Update points
+            self.points[0].update_pos(point_pos);
+
+            // Update first in vbo
+            self.lines_vb.update(&[sf::Vertex::new(
+                point_pos,
+                color,
+                sf::Vector2f::new(0.0, 0.0))], 0);
+
+            // Update last in vbo
+            self.lines_vb.update(&[sf::Vertex::new(
+                point_pos,
+                color,
+                sf::Vector2f::new(0.0, 0.0))], self.points.len() as u32);
+        } else {
+            self.points[index].update_pos(point_pos);
+
+            // Update in vbo
+            self.lines_vb.update(&[sf::Vertex::new(
+                point_pos,
+                color,
+                sf::Vector2f::new(0.0, 0.0))], index as u32);
         }
-        self.points[self.points.len() - 1] = self.points[0].clone();
     }
 
-    // Clones the first element of the points vector and pushes it at the end
-    pub fn make_proper(&mut self) {
-        if self.is_proper() {
-            return;
-        }
-        self.points.push(self.points[0].clone())
+    fn update_last_vertex(&mut self, point_pos: sf::Vector2f, color: sf::Color) {
+        self.update_vertex(point_pos, color, self.points_count() as isize - 1)
     }
 
-    pub fn remove_point(&mut self, id: usize) {
-        self.points.remove(id);
-
-        if self.is_proper() {
-            if id == 0 {
-                self.points.remove(self.points_count() - 1);
-                self.points.push(self.points[0].clone());
-            } else if id == self.points_count() - 1 {
-                self.points.remove(0);
-                self.points.push(self.points[0].clone());
-            }
-        }
-
-        self.lines_vb = Self::generate_lines_vb(&self.points);
-    }
-
-    fn update_vertex(&mut self, point_pos: sf::Vector2f, color: sf::Color, index: usize) -> Result<(), io::Error> {
-        if self.points_count() <= index {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
-        }
-
-        self.points[index].update_pos(point_pos);
-
-        self.lines_vb.update(&[sf::Vertex::new(point_pos, color, sf::Vector2f::new(0.0, 0.0))], index as u32);
-
-        if self.is_proper() {
-            if index == 0 {
-                self.points[self.points.len() - 1].update_pos(point_pos);
-
-                self.lines_vb.update(&[sf::Vertex::new(point_pos, color, sf::Vector2f::new(0.0, 0.0))], self.points.len() as u32 - 1);
-            } else if index == self.points.len() - 1 {
-                self.points[0].update_pos(point_pos);
-
-                self.lines_vb.update(&[sf::Vertex::new(point_pos, color, sf::Vector2f::new(0.0, 0.0))], 0);
-            }
-        }
-
-
-        Ok(())
-    }
-
-    fn update_last_vertex(&mut self, point_pos: sf::Vector2f, color: sf::Color) -> Result<(), io::Error> {
-        self.update_vertex(point_pos, color, self.points_count() - 1)
-    }
-
-    pub fn update_point(&mut self, point_pos: sf::Vector2f, index: usize) -> Result<(), io::Error> {
+    pub fn update_point_pos(&mut self, point_pos: sf::Vector2f, index: isize) {
         self.update_vertex(point_pos, self.edges_color, index)
     }
 
-    pub fn update_last_point(&mut self, point_pos: sf::Vector2f) -> Result<(), io::Error> {
-        self.update_point(point_pos, self.points_count() - 1)
+    pub fn update_last_point_pos(&mut self, point_pos: sf::Vector2f) {
+        self.update_point_pos(point_pos, self.points_count() as isize - 1)
     }
 
     pub fn set_edges_color(&mut self, edges_color: sf::Color) {
@@ -227,31 +232,34 @@ impl<'a> Polygon<'a> {
         for i in 0..self.points.len() {
             self.lines_vb.update(&[sf::Vertex::new(self.points[i].pos, self.edges_color, sf::Vector2f::new(0.0, 0.0))], i as u32);
         }
+
+        if self.show_last_line {
+            self.lines_vb.update(&[sf::Vertex::new(self.points[0].pos, self.edges_color, sf::Vector2f::new(0.0, 0.0))], self.points_count() as u32);
+        }
     }
 
-    /// Polygon is said to be proper iff the last element of points vector is an
-    /// exact copy of the first element
     pub fn is_proper(&self) -> bool {
-        if self.points.len() < 4 {
+        if self.points.len() < 3 {
             return false;
         }
-
-        // This comparison valid, since if the Polygon is proper, the last point must be
-        // an exact copy of the first point
-        if self.points[0].pos == self.points[self.points.len() - 1].pos {
-            return true;
-        }
-
-        return false;
+        return true;
     }
 
-    pub fn select_point(&mut self, id: usize) {
-        if self.is_proper() {
-            assert_ne!(id, self.points.len() - 1);
-        }
+    pub fn select_point(&mut self, id: isize) {
+        let id = self.fix_index(id);
         self.points[id].is_selected = true;
     }
+    pub fn deselect_point(&mut self, id: isize) {
+        let id = self.fix_index(id);
+        self.points[id].is_selected = false;
+    }
+
+    pub fn is_point_selected(&self, id: isize) -> bool {
+        self.points[self.fix_index(id)].is_selected
+    }
+
     pub fn is_self_crossing(&self) -> bool {
+        // TODO: Fix
         for i in 0..(self.points_count() - 2) {
             let line1 = geo::geometry::Line::new(
                 geo::coord! {x: self.points[i].pos.x, y: self.points[i].pos.y},
@@ -283,9 +291,9 @@ impl<'a> Polygon<'a> {
         false
     }
 
-    /// This method assumes, that first and the last element of the points are the same
-    /// (polygon has to be a proper polygon). If points order has been reversed, returns true.
     pub fn assert_ccw(&mut self) -> bool {
+        assert_eq!(self.is_proper(), true);
+
         let mut sum: f32 = 0.;
         for i in 0..(self.points.len() - 1) {
             sum += (self.points[i + 1].pos.x - self.points[i].pos.x) * (self.points[i + 1].pos.y + self.points[i].pos.y);
@@ -293,7 +301,7 @@ impl<'a> Polygon<'a> {
 
         if sum <= 0. {
             self.points.reverse();
-            self.lines_vb = Self::generate_lines_vb(&self.points);
+            self.generate_lines_vb();
             return true;
         }
 
@@ -312,17 +320,20 @@ impl<'a> Polygon<'a> {
         self.points.clear();
     }
 
-    pub fn draw_as_lines(&self, target: &mut dyn sf::RenderTarget) {
+    pub fn draw_edges(&self, target: &mut dyn sf::RenderTarget) {
         self.lines_vb.draw(target, &Default::default());
     }
 
-    pub fn draw_idle_circles(&self, target: &mut dyn sf::RenderTarget) {
+    pub fn draw_points(&self, target: &mut dyn sf::RenderTarget) {
         for point in &self.points {
-            point.draw_idle_circle(target);
+            point.draw_point_circle(target);
         }
     }
+    pub fn draw_point_selection(&self, id: isize, target: &mut dyn sf::RenderTarget) {
+        self.points[self.fix_index(id)].draw_selection_circle(target);
+    }
 
-    pub fn draw_bresenham(&self, _img_target: &mut sf::Image) {
+    pub fn draw_edges_bresenham(&self, _img_target: &mut sf::Image) {
         // TODO
     }
 }
@@ -333,6 +344,7 @@ impl<'a> Clone for Polygon<'a> {
             points: self.points.clone(),
             lines_vb: self.lines_vb.clone(),
             edges_color: self.edges_color.clone(),
+            show_last_line: self.show_last_line.clone(),
         }
     }
 }

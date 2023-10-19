@@ -133,24 +133,13 @@ impl IdleState {
     fn select_points_and_return_state(self: Box<Self>, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext, success_result: Box<dyn State>) -> Box<dyn State> {
         for poly in app_ctx.polygons.iter_mut() {
             if poly.is_point_hovered() {
-                let err = poly.select_point(poly.get_hovered_point_id());
-
-                if err.is_ok() {
-                    return success_result;
-                }
+                poly.select_point(poly.get_hovered_point_id() as isize);
+                return success_result;
             } else if poly.is_line_hovered() {
                 let line = poly.get_hovered_line_ids();
-                let err = poly.select_point(line.0);
-
-                if err.is_err() {
-                    continue;
-                }
-
-                let err = poly.select_point(line.1);
-
-                if err.is_ok() {
-                    return success_result;
-                }
+                poly.select_point(line.0 as isize);
+                poly.select_point(line.1 as isize);
+                return success_result;
             }
         }
 
@@ -216,45 +205,35 @@ impl State for IdleState {
 
 impl State for SelectionState {
     fn on_left_mouse_clicked(self: Box<Self>, mouse_pos: Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
-        let mut nothing_hovered = true;
-
         for i in 0..app_ctx.polygons.len() {
             if app_ctx.polygons[i].is_point_hovered() {
-                if let Ok(is_selected) = app_ctx.polygons[i].is_point_selected(app_ctx.polygons[i].get_hovered_point_id()) {
-                    if !is_selected {
-                        for j in 0..app_ctx.polygons.len() {
-                            app_ctx.polygons[j].deselect_all_points();
-                        }
-                        let id = app_ctx.polygons[i].get_hovered_point_id();
-                        let _err = app_ctx.polygons[i].select_point(id);
+                let is_selected = app_ctx.polygons[i].is_point_selected(app_ctx.polygons[i].get_hovered_point_id() as isize);
+                if !is_selected {
+                    for j in 0..app_ctx.polygons.len() {
+                        app_ctx.polygons[j].deselect_all_points();
                     }
-                    return Box::new(DraggingState::new(mouse_pos, app_ctx));
+                    let id = app_ctx.polygons[i].get_hovered_point_id();
+                    let _err = app_ctx.polygons[i].select_point(id as isize);
                 }
-                nothing_hovered = false;
+                return Box::new(DraggingState::new(mouse_pos, app_ctx));
             } else if app_ctx.polygons[i].is_line_hovered() {
-                if let Ok(is_selected) = app_ctx.polygons[i].is_line_selected(app_ctx.polygons[i].get_hovered_line_ids().0) {
-                    if !is_selected {
-                        for j in 0..app_ctx.polygons.len() {
-                            app_ctx.polygons[j].deselect_all_points();
-                        }
-                        let line = app_ctx.polygons[i].get_hovered_line_ids();
-                        let _err = app_ctx.polygons[i].select_point(line.0);
-                        let _err = app_ctx.polygons[i].select_point(line.1);
+                let is_selected = app_ctx.polygons[i].is_line_selected(app_ctx.polygons[i].get_hovered_line_ids().0 as isize);
+                if !is_selected {
+                    for j in 0..app_ctx.polygons.len() {
+                        app_ctx.polygons[j].deselect_all_points();
                     }
-                    return Box::new(DraggingState::new(mouse_pos, app_ctx));
+                    let line = app_ctx.polygons[i].get_hovered_line_ids();
+                    let _err = app_ctx.polygons[i].select_point(line.0 as isize);
+                    let _err = app_ctx.polygons[i].select_point(line.1 as isize);
                 }
-                nothing_hovered = false;
+                return Box::new(DraggingState::new(mouse_pos, app_ctx));
             }
         }
 
-        if nothing_hovered {
-            for poly in app_ctx.polygons.iter_mut() {
-                poly.deselect_all_points();
-            }
-            return Box::new(IdleState::new(app_ctx));
+        for poly in app_ctx.polygons.iter_mut() {
+            poly.deselect_all_points();
         }
-
-        self
+        return Box::new(IdleState::new(app_ctx));
     }
 
     fn on_left_mouse_released(self: Box<Self>, mouse_pos: Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
@@ -266,34 +245,32 @@ impl State for SelectionState {
 
         for poly in app_ctx.polygons.iter_mut() {
             if poly.is_point_hovered() {
-                if let Ok(is_selected) = poly.is_point_selected(poly.get_hovered_point_id()) {
-                    if is_selected {
-                        let _err = poly.deselect_point(poly.get_hovered_point_id());
+                let is_selected = poly.is_point_selected(poly.get_hovered_point_id() as isize);
+                if is_selected {
+                    let _err = poly.deselect_point(poly.get_hovered_point_id() as isize);
 
-                        if poly.selected_points_count() == 0 {
-                            return Box::new(IdleState::new(app_ctx));
-                        }
-                    } else {
-                        let _err = poly.select_point(poly.get_hovered_point_id());
+                    if poly.selected_points_count() == 0 {
+                        return Box::new(IdleState::new(app_ctx));
                     }
-                    nothing_hovered = false;
+                } else {
+                    let _err = poly.select_point(poly.get_hovered_point_id() as isize);
                 }
+                nothing_hovered = false;
             } else if poly.is_line_hovered() {
                 let line = poly.get_hovered_line_ids();
-                if let Ok(is_selected) = poly.is_line_selected(line.0) {
-                    if is_selected {
-                        let _err = poly.deselect_point(line.0);
-                        let _err = poly.deselect_point(line.1);
+                let is_selected = poly.is_line_selected(line.0 as isize);
+                if is_selected {
+                    poly.deselect_point(line.0 as isize);
+                    poly.deselect_point(line.1 as isize);
 
-                        if poly.selected_points_count() == 0 {
-                            return Box::new(IdleState::new(app_ctx));
-                        }
-                    } else {
-                        let _err = poly.select_point(line.0);
-                        let _err = poly.select_point(line.1);
+                    if poly.selected_points_count() == 0 {
+                        return Box::new(IdleState::new(app_ctx));
                     }
-                    nothing_hovered = false;
+                } else {
+                    poly.select_point(line.0 as isize);
+                    poly.select_point(line.1 as isize);
                 }
+                nothing_hovered = false;
             }
         }
 
@@ -409,7 +386,7 @@ impl State for EditPointsState {
     fn on_left_mouse_clicked(self: Box<Self>, mouse_pos: Vector2f, app_ctx: &mut AppContext) -> Box<dyn State> {
         for poly in app_ctx.polygons.iter_mut() {
             if poly.is_point_hovered() {
-                let err = poly.remove_point(poly.get_hovered_point_id());
+                let err = poly.remove_point(poly.get_hovered_point_id() as isize);
                 if let Err(e) = err {
                     // Ignore if polygon is simplex
                     if e.kind() == io::ErrorKind::InvalidData {
@@ -420,7 +397,7 @@ impl State for EditPointsState {
             } else if poly.is_line_hovered() {
                 if poly.can_insert() {
                     let line = poly.get_hovered_line_ids();
-                    let _err = poly.insert_point(line.1, poly.get_insert_pos());
+                    let _err = poly.insert_point(line.1 as isize, poly.get_insert_pos());
                     return Box::new(IdleState::new(app_ctx));
                 }
             }
@@ -459,7 +436,5 @@ impl State for EditPointsState {
         }
     }
 
-    fn state_name(&self) -> &'static str {
-        "Add Point State"
-    }
+    fn state_name(&self) -> &'static str { "Edit Point State" }
 }

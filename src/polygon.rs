@@ -18,6 +18,9 @@ pub struct PolygonBuilder<'s> {
 
     helper_circle: sf::CircleShape<'s>,
 
+    new_line: sf::VertexBuffer,
+    new_point_circle: sf::CircleShape<'s>,
+
     // PolygonBuilder events
     is_line_intersecting: bool,
     entered_correct_vertex_region: bool,
@@ -29,25 +32,53 @@ impl<'a> PolygonBuilder<'a> {
         helper_circle.set_fill_color(style::POINT_DETECTION_COLOR_CORRECT);
         helper_circle.set_origin(sf::Vector2f::new(style::POINT_DETECTION_RADIUS, style::POINT_DETECTION_RADIUS));
 
+        let mut new_point_circle = sf::CircleShape::new(style::POINT_DETECTION_RADIUS, 30);
+        new_point_circle.set_fill_color(style::POINTS_COLOR);
+        new_point_circle.set_origin(sf::Vector2f::new(style::POINT_DETECTION_RADIUS, style::POINT_DETECTION_RADIUS));
+        new_point_circle.set_position(sf::Vector2f::new(-100.0, -100.0));
+
         PolygonBuilder {
             raw_polygon: None,
             active: false,
             is_line_intersecting: false,
             entered_correct_vertex_region: false,
             helper_circle,
+            new_line: sf::VertexBuffer::new(sf::PrimitiveType::LINES, 2, sf::VertexBufferUsage::DYNAMIC),
+            new_point_circle,
         }
     }
 
-    // If raw_polygon is None => creates a new one and adds starting point and the cursor point
+    fn update_line(&mut self, pos1: sf::Vector2f, pos2: sf::Vector2f) {
+        self.new_line.update(
+            &[
+                sf::Vertex::new(
+                    pos1,
+                    style::POINTS_COLOR,
+                    sf::Vector2f::new(0.0, 0.0),
+                ),
+                sf::Vertex::new(
+                    pos2,
+                    style::POINTS_COLOR,
+                    sf::Vector2f::new(0.0, 0.0),
+                )
+            ],
+            0,
+        );
+    }
+
+    // If raw_polygon is None => creates a new one and adds starting point
     // Else just adds a new point
     fn add(&mut self, point: sf::Vector2f) {
         if self.raw_polygon.is_none() {
-            // We need an additional point to attach it to the mouse cursor
             self.raw_polygon = Some(Polygon::new_with_start_point(point));
+            self.raw_polygon.as_mut().unwrap().show_last_line(false);
+            self.update_line(point, point);
+            self.new_point_circle.set_position(point);
+            return;
         }
 
         if let Some(ref mut polygon) = self.raw_polygon {
-            polygon.push_point(point);
+            polygon.push_point_with_pos(point);
         }
     }
 
@@ -82,28 +113,24 @@ impl<'a> PolygonBuilder<'a> {
         if self.raw_polygon.is_some() {
             // Assert minimal length of the new edge
             if !self.entered_correct_vertex_region {
-                for i in 1..(self.raw_polygon.as_ref().unwrap().points_count() - 1) {
-                    if my_math::distance(&add_pos, &self.raw_polygon.as_ref().unwrap().get_point_pos(i)) <= style::POLY_EDGE_MIN_LEN {
+                for i in 1..self.raw_polygon.as_ref().unwrap().points_count() {
+                    if my_math::distance(&add_pos, &self.raw_polygon.as_ref().unwrap().get_point_pos(i as isize)) <= style::POLY_EDGE_MIN_LEN {
                         return None;
                     }
                 }
-            }
-
-            // If a polygon already exists, there must be at least 2 vertices inside
-            let first = self.raw_polygon.as_ref().unwrap().first_point_pos().unwrap();
-
-            if self.entered_correct_vertex_region {
-                if self.raw_polygon.as_ref().unwrap().points_count() > 3 {
+            } else {
+                if self.raw_polygon.as_ref().unwrap().points_count() >= 3 {
                     // If this condition is met, adding a new polygon is finished
 
-                    // Change the position of the last vertex (cursor vertex)
-                    self.raw_polygon.as_mut().unwrap().move_last_to_make_proper();
+                    self.update_line(sf::Vector2f::new(0.0, 0.0), sf::Vector2::new(0.0, 0.0));
+                    self.new_point_circle.set_position(sf::Vector2f::new(-100.0, -100.0));
 
                     // Deactivate the builder
                     self.active = false;
                     self.clear_draw_flags();
 
                     // Build the PolygonObject
+                    self.raw_polygon.as_mut().unwrap().show_last_line(true);
                     let poly = std::mem::replace(&mut self.raw_polygon, None);
                     return Some(PolygonObject::from(poly.unwrap().to_owned()));
                 }
@@ -126,12 +153,15 @@ impl<'a> PolygonBuilder<'a> {
             // Polygon should contain at least 2 vertices here
             let first = poly.first_point_pos().unwrap();
 
+            let last = poly.points_count() - 1;
+            let last = poly.get_point_pos(last as isize);
+
             let mut m_pos = mouse_pos;
 
             let mut is_magnet_set: bool = false;
 
             if my_math::distance(&first, &m_pos) <= style::POINT_DETECTION_RADIUS {
-                if poly.points_count() > 3 {
+                if poly.points_count() >= 3 {
                     // Show the circle helper to complete the polygon creation
                     self.helper_circle.set_fill_color(style::POINT_DETECTION_COLOR_CORRECT);
                 } else {
@@ -151,18 +181,17 @@ impl<'a> PolygonBuilder<'a> {
 
             // Detect new line intersections
             self.is_line_intersecting = false;
-
             let line1 = geo::geometry::Line::new(
-                geo::coord! {x: poly.points[poly.points_count() - 2].pos.x, y: poly.points[poly.points_count() - 2].pos.y},
-                geo::coord! {x: poly.points[poly.points_count() - 1].pos.x, y: poly.points[poly.points_count() - 1].pos.y},
+                geo::coord! {x: last.x, y: last.y},
+                geo::coord! {x: m_pos.x, y: m_pos.y},
             );
 
             // Detect point intersections with the other lines
-            if poly.points_count() > 3 && !is_magnet_set {
-                for i in 0..(poly.points_count() - 3) {
+            if poly.points_count() >= 3 && !is_magnet_set {
+                for i in 0..(poly.points_count() - 2) as isize {
                     let line2 = geo::geometry::Line::new(
-                        geo::coord! {x: poly.points[i].pos.x, y: poly.points[i].pos.y},
-                        geo::coord! {x: poly.points[i + 1].pos.x, y: poly.points[i + 1].pos.y},
+                        geo::coord! {x: poly.get_point_pos(i).x, y: poly.get_point_pos(i).y},
+                        geo::coord! {x: poly.get_point_pos(i + 1).x, y: poly.get_point_pos(i + 1).y},
                     );
                     let result = geo::algorithm::line_intersection::line_intersection(
                         line1,
@@ -176,13 +205,15 @@ impl<'a> PolygonBuilder<'a> {
                 }
             }
 
-            // Update cursor vertex position
-            poly.update_last_point(m_pos).unwrap();
             if self.is_line_intersecting {
                 poly.set_edges_color(style::LINES_COLOR_INCORRECT);
             } else {
                 poly.set_edges_color(style::LINES_COLOR);
             }
+
+            // Update line helper
+            self.update_line(last, m_pos);
+            self.new_point_circle.set_position(m_pos);
         }
     }
 
@@ -191,6 +222,11 @@ impl<'a> PolygonBuilder<'a> {
     }
 
     pub fn draw(&self, target: &mut dyn sf::RenderTarget) {
+        if self.active {
+            self.new_line.draw(target, &Default::default());
+            target.draw(&self.new_point_circle);
+        }
+
         if self.entered_correct_vertex_region {
             target.draw(&self.helper_circle);
         }
@@ -275,39 +311,28 @@ impl<'a> PolygonObject<'a> {
     pub fn get_insert_pos(&self) -> sf::Vector2f {
         self.insert_pos
     }
-    pub fn insert_point(&mut self, id: usize, pos: sf::Vector2f) -> Result<(), io::Error> {
-        if id > self.raw_polygon.points_count() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
-        }
-
-        self.raw_polygon.insert_point(id, pos);
+    pub fn insert_point(&mut self, id: isize, pos: sf::Vector2f) {
+        self.raw_polygon.insert_point_with_pos(id, pos);
         self.can_insert = false;
-        Ok(())
     }
 
-    pub fn remove_point(&mut self, id: usize) -> Result<(), io::Error> {
-        if id > self.raw_polygon.points_count() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
-        }
-
-        if self.raw_polygon.points_count() <= 4 {
+    pub fn remove_point(&mut self, id: isize) -> Result<(), io::Error> {
+        if self.raw_polygon.points_count() <= 3 {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "Not enough points"));
         }
-
         self.raw_polygon.remove_point(id);
-        self.selection.remove(&id);
-
+        self.selection.remove(&(id as usize));
         Ok(())
     }
 
     pub fn update_insertion(&mut self, pos: sf::Vector2f) {
-        for i in 0..(self.raw_polygon.points_count() - 1) {
+        for i in 0..self.raw_polygon.points_count() as isize {
             if my_math::distance(&pos, &self.raw_polygon.get_point_pos(i)) <= style::POINT_DETECTION_RADIUS ||
-                my_math::distance(&pos, &self.raw_polygon.get_point_pos(i)) <= style::POINT_DETECTION_RADIUS {
+                my_math::distance(&pos, &self.raw_polygon.get_point_pos(i + 1)) <= style::POINT_DETECTION_RADIUS {
                 continue;
             }
 
-            let v01 = self.raw_polygon.get_point_pos(i) - self.raw_polygon.get_point_pos(i);
+            let v01 = self.raw_polygon.get_point_pos(i + 1) - self.raw_polygon.get_point_pos(i);
             let v0m = pos - self.raw_polygon.get_point_pos(i);
 
             if my_math::dot_prod(&v01, &v0m) < 0.0 {
@@ -334,10 +359,10 @@ impl<'a> PolygonObject<'a> {
     }
 
     fn update_on_point_hover(&mut self, pos: sf::Vector2f) {
-        for i in 0..self.raw_polygon.points_count() {
+        for i in 0..self.raw_polygon.points_count() as isize {
             if my_math::distance(&self.raw_polygon.get_point_pos(i), &pos) <= style::POINT_DETECTION_RADIUS {
                 self.hover_circle.set_position(self.raw_polygon.get_point_pos(i).clone());
-                self.hovered_point_id = i;
+                self.hovered_point_id = i as usize;
                 self.is_point_hovered = true;
                 return;
             }
@@ -346,7 +371,7 @@ impl<'a> PolygonObject<'a> {
     }
 
     fn update_on_line_hover(&mut self, pos: sf::Vector2f) {
-        for i in 0..self.raw_polygon.points_count() {
+        for i in 0..self.raw_polygon.points_count() as isize {
             let v01 = self.raw_polygon.get_point_pos(i + 1) - self.raw_polygon.get_point_pos(i);
             let v0m = pos - self.raw_polygon.get_point_pos(i);
 
@@ -371,7 +396,7 @@ impl<'a> PolygonObject<'a> {
                 self.hover_quad.set_point(1, self.raw_polygon.get_point_pos(i + 1) + proj_norm * style::LINE_THICKNESS / 2.);
                 self.hover_quad.set_point(2, self.raw_polygon.get_point_pos(i + 1) - proj_norm * style::LINE_THICKNESS / 2.);
                 self.hover_quad.set_point(3, self.raw_polygon.get_point_pos(i) - proj_norm * style::LINE_THICKNESS / 2.);
-                self.hovered_line_id = i;
+                self.hovered_line_id = i as usize;
                 self.is_line_hovered = true;
                 return;
             }
@@ -407,6 +432,12 @@ impl<'a> PolygonObject<'a> {
 
     pub fn assert_ccw(&mut self) {
         self.raw_polygon.assert_ccw();
+        self.selection.clear();
+        for i in 0..self.raw_polygon.points_count() {
+            if self.raw_polygon.is_point_selected(i as isize) {
+                self.selection.insert(i);
+            }
+        }
     }
 
     pub fn get_hovered_point_id(&self) -> usize {
@@ -417,56 +448,30 @@ impl<'a> PolygonObject<'a> {
         (self.hovered_line_id, self.hovered_line_id + 1)
     }
 
-    pub fn select_point(&mut self, id: usize) -> Result<(), io::Error> {
-        // selection.len() must always be equal to raw_polygon.points_count()
-        if id >= self.raw_polygon.points_count() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
-        }
-
-        let last_id = self.raw_polygon.points_count() - 1;
-        if id == 0 || id == last_id {
-            self.raw_polygon.points[0].is_selected = true;
-            self.raw_polygon.points[last_id].is_selected = true;
-
-            self.selection.insert(0);
-            self.selection.insert(last_id);
-        } else {
-            self.raw_polygon.points[id].is_selected = true;
-
-            self.selection.insert(id);
-        }
-
-        Ok(())
+    pub fn select_point(&mut self, id: isize) {
+        self.raw_polygon.select_point(id);
+        self.selection.insert(self.raw_polygon.fix_index(id));
     }
 
-    pub fn is_point_selected(&self, id: usize) -> Result<bool, io::Error> {
-        // selection.len() must always be equal to raw_polygon.points_count()
-        if id >= self.raw_polygon.points_count() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
-        }
-
-        Ok(self.raw_polygon.points[id].is_selected)
+    pub fn is_point_selected(&self, id: isize) -> bool {
+        self.raw_polygon.is_point_selected(id)
     }
 
-    pub fn is_line_selected(&self, first_id: usize) -> Result<bool, io::Error> {
-        if first_id >= self.raw_polygon.points_count() - 1 {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
-        }
-
-        Ok(self.raw_polygon.points[first_id].is_selected && self.raw_polygon.points[first_id + 1].is_selected)
+    pub fn is_line_selected(&self, first_id: isize) -> bool {
+        self.raw_polygon.is_point_selected(first_id) && self.raw_polygon.is_point_selected(first_id)
     }
 
     pub fn deselect_all_points(&mut self) {
         for id in self.selection.iter() {
-            self.raw_polygon.points[*id].is_selected = false;
+            self.raw_polygon.deselect_point(*(id) as isize);
         }
         self.selection.clear();
     }
 
     pub fn select_all_points(&mut self) {
-        for id in 0..self.raw_polygon.points_count() {
-            self.raw_polygon.points[id].is_selected = true;
-            self.selection.insert(id);
+        for id in 0..self.raw_polygon.points_count() as isize {
+            self.raw_polygon.select_point(id);
+            self.selection.insert(self.raw_polygon.fix_index(id));
         }
     }
 
@@ -474,31 +479,14 @@ impl<'a> PolygonObject<'a> {
         self.selection.len()
     }
 
-    pub fn deselect_point(&mut self, id: usize) -> Result<(), io::Error> {
-        // selection.len() must always be equal to raw_polygon.points_count()
-        if id >= self.raw_polygon.points_count() {
-            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
-        }
-
-        let last_id = self.raw_polygon.points_count() - 1;
-        if id == 0 || id == last_id {
-            self.raw_polygon.points[0].is_selected = false;
-            self.raw_polygon.points[last_id].is_selected = false;
-
-            self.selection.remove(&0);
-            self.selection.remove(&(self.raw_polygon.points_count() - 1));
-        } else {
-            self.raw_polygon.points[id].is_selected = false;
-
-            self.selection.remove(&id);
-        }
-
-        Ok(())
+    pub fn deselect_point(&mut self, id: isize) {
+        self.raw_polygon.deselect_point(id);
+        self.selection.remove(&self.raw_polygon.fix_index(id));
     }
 
     pub fn move_selected_points(&mut self, vec: sf::Vector2f) {
         for id in self.selection.iter() {
-            let _err = self.raw_polygon.update_point(self.raw_polygon.points[*id].pos + vec, *id);
+            self.raw_polygon.update_point_pos(self.raw_polygon.get_point_pos(*id as isize) + vec, *id as isize);
         }
     }
 
@@ -518,63 +506,64 @@ impl<'a> PolygonObject<'a> {
         }
 
         for id in self.selection.iter() {
-            self.raw_polygon.points[*id].draw_selection_circle(target);
+            self.raw_polygon.draw_point_selection(*id as isize, target);
         }
     }
 
     // id must be less than points_count - 1
 
     pub fn draw_egui(&mut self, ui: &mut egui::Ui) {
-        egui::CollapsingHeader::new(format!("Polygon {}", self.id))
-            .default_open(true)
-            .show(ui, |ui| {
-                for id in self.selection.iter() {
-                    if *id == self.raw_polygon.points_count() - 1 {
-                        continue;
-                    }
-
-                    if self.raw_polygon.points[*id + 1].is_selected {
-                        // Pick the drawing method
-                        let mut old = self.raw_polygon.points[*id].edge_constraint.clone();
-
-                        egui::ComboBox::from_label(format!("({}, {}) Constraint", *id, *id + 1))
-                            .selected_text(match self.raw_polygon.points[*id].edge_constraint {
-                                EdgeConstraint::None => "None",
-                                EdgeConstraint::Horizontal => "Horizontal",
-                                EdgeConstraint::Vertical => "Vertical"
-                            })
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(&mut self.raw_polygon.points[*id].edge_constraint, EdgeConstraint::None, "None");
-                                ui.selectable_value(&mut self.raw_polygon.points[*id].edge_constraint, EdgeConstraint::Horizontal, "Horizontal");
-                                ui.selectable_value(&mut self.raw_polygon.points[*id].edge_constraint, EdgeConstraint::Vertical, "Vertical");
-                            });
-
-                        if old != self.raw_polygon.points[*id].edge_constraint {
-                            println!("CHANGED");
-                            match self.raw_polygon.points[*id].edge_constraint {
-                                EdgeConstraint::Horizontal => {
-                                    let old_p0 = self.raw_polygon.points[*id].pos;
-                                    let old_p1 = self.raw_polygon.points[*id + 1].pos;
-
-                                    let avg = (old_p0 + old_p1);
-                                    let len = distance(&old_p0, &old_p1);
-
-                                    self.raw_polygon.points[*id].pos = (avg + sf::Vector2f::new(-len, 0.)) / 2.;
-                                    self.raw_polygon.points[*id + 1].pos = (avg + sf::Vector2f::new(len, 0.)) / 2.;
-
-                                    let _err = self.raw_polygon.update_point(self.raw_polygon.points[*id].pos, *id);
-                                    let _err = self.raw_polygon.update_point(self.raw_polygon.points[*id + 1].pos, *id + 1);
-
-                                    if *id == 0 {
-                                        let _err = self.raw_polygon.update_point(self.raw_polygon.points[0].pos, self.raw_polygon.points_count() - 1);
-                                    }
-                                }
-                                EdgeConstraint::Vertical => {}
-                                EdgeConstraint::None => (),
-                            }
-                        }
-                    }
-                }
-            });
+        //
+        // egui::CollapsingHeader::new(format!("Polygon {}", self.id))
+        //     .default_open(true)
+        //     .show(ui, |ui| {
+        //         for id in self.selection.iter() {
+        //             if *id == self.raw_polygon.points_count() - 1 {
+        //                 continue;
+        //             }
+        //
+        //             if self.raw_polygon.points[*id + 1].is_selected {
+        //                 // Pick the drawing method
+        //                 let mut old = self.raw_polygon.points[*id].edge_constraint.clone();
+        //
+        //                 egui::ComboBox::from_label(format!("({}, {}) Constraint", *id, *id + 1))
+        //                     .selected_text(match self.raw_polygon.points[*id].edge_constraint {
+        //                         EdgeConstraint::None => "None",
+        //                         EdgeConstraint::Horizontal => "Horizontal",
+        //                         EdgeConstraint::Vertical => "Vertical"
+        //                     })
+        //                     .show_ui(ui, |ui| {
+        //                         ui.selectable_value(&mut self.raw_polygon.points[*id].edge_constraint, EdgeConstraint::None, "None");
+        //                         ui.selectable_value(&mut self.raw_polygon.points[*id].edge_constraint, EdgeConstraint::Horizontal, "Horizontal");
+        //                         ui.selectable_value(&mut self.raw_polygon.points[*id].edge_constraint, EdgeConstraint::Vertical, "Vertical");
+        //                     });
+        //
+        //                 if old != self.raw_polygon.points[*id].edge_constraint {
+        //                     println!("CHANGED");
+        //                     match self.raw_polygon.points[*id].edge_constraint {
+        //                         EdgeConstraint::Horizontal => {
+        //                             let old_p0 = self.raw_polygon.points[*id].pos;
+        //                             let old_p1 = self.raw_polygon.points[*id + 1].pos;
+        //
+        //                             let avg = (old_p0 + old_p1);
+        //                             let len = distance(&old_p0, &old_p1);
+        //
+        //                             self.raw_polygon.points[*id].pos = (avg + sf::Vector2f::new(-len, 0.)) / 2.;
+        //                             self.raw_polygon.points[*id + 1].pos = (avg + sf::Vector2f::new(len, 0.)) / 2.;
+        //
+        //                             let _err = self.raw_polygon.update_point_pos(self.raw_polygon.points[*id].pos, *id);
+        //                             let _err = self.raw_polygon.update_point_pos(self.raw_polygon.points[*id + 1].pos, *id + 1);
+        //
+        //                             if *id == 0 {
+        //                                 let _err = self.raw_polygon.update_point_pos(self.raw_polygon.points[0].pos, self.raw_polygon.points_count() - 1);
+        //                             }
+        //                         }
+        //                         EdgeConstraint::Vertical => {}
+        //                         EdgeConstraint::None => (),
+        //                     }
+        //                 }
+        //             }
+        //         }
+        //     });
     }
 }

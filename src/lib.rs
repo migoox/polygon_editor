@@ -30,7 +30,6 @@ const BACKGROUND_COLOR: sf::Color = sf::Color::rgb(37, 43, 72);
 #[derive(PartialEq)]
 pub enum DrawingMode {
     GPULines,
-    GPUThickLines,
     CPUBresenhamLines,
 }
 
@@ -234,21 +233,11 @@ impl Application<'_> {
         match self.drawing_mode {
             DrawingMode::GPULines => {
                 for poly in &self.app_ctx.polygons {
-                    poly.raw_polygon().draw_as_lines(&mut self.window);
+                    poly.raw_polygon().draw_edges(&mut self.window);
                 }
 
                 match self.app_ctx.polygon_builder.raw_polygon() {
-                    Some(&ref poly) => poly.draw_as_lines(&mut self.window),
-                    None => (),
-                }
-            }
-            DrawingMode::GPUThickLines => {
-                for poly in &self.app_ctx.polygons {
-                    poly.raw_polygon().draw_as_quads(&mut self.window);
-                }
-
-                match self.app_ctx.polygon_builder.raw_polygon() {
-                    Some(&ref poly) => poly.draw_as_quads(&mut self.window),
+                    Some(&ref poly) => poly.draw_edges(&mut self.window),
                     None => (),
                 }
             }
@@ -257,11 +246,11 @@ impl Application<'_> {
 
         // Draw points of the polygons
         for poly in &self.app_ctx.polygons {
-            poly.raw_polygon().draw_idle_circles(&mut self.window);
+            poly.raw_polygon().draw_points(&mut self.window);
         }
 
         match self.app_ctx.polygon_builder.raw_polygon() {
-            Some(&ref poly) => poly.draw_idle_circles(&mut self.window),
+            Some(&ref poly) => poly.draw_points(&mut self.window),
             None => (),
         }
 
@@ -295,12 +284,10 @@ impl Application<'_> {
                 egui::ComboBox::from_label("Drawing method")
                     .selected_text(match self.drawing_mode {
                         DrawingMode::GPULines => "Lines [GPU]",
-                        DrawingMode::GPUThickLines => "Thick Lines [GPU]",
                         DrawingMode::CPUBresenhamLines => "Bresenham Lines [CPU]"
                     })
                     .show_ui(ui, |ui| {
                         ui.selectable_value(&mut self.drawing_mode, DrawingMode::GPULines, "Lines [GPU]");
-                        ui.selectable_value(&mut self.drawing_mode, DrawingMode::GPUThickLines, "Thick Lines [GPU]");
                         ui.selectable_value(&mut self.drawing_mode, DrawingMode::CPUBresenhamLines, "Bresenham Lines [CPU]");
                     });
 
