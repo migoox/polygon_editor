@@ -1,5 +1,6 @@
 use std::io;
 use std::collections::{HashMap, HashSet};
+use egui_sfml::egui;
 use sfml::graphics::{Drawable, RenderTarget, Shape, Transformable};
 use super::sf;
 
@@ -15,10 +16,25 @@ const POINT_DETECTION_COLOR_CORRECT: sf::Color = sf::Color::rgb(100, 204, 197);
 const POINT_DETECTION_COLOR_INCORRECT: sf::Color = sf::Color::rgb(237, 123, 123);
 const POINT_SELECTED_COLOR: sf::Color = sf::Color::rgb(167, 187, 236);
 
+#[derive(Clone)]
+#[derive(PartialEq)]
+pub enum EdgeConstraint {
+    None,
+    Horizontal,
+    Vertical,
+}
+
 pub struct Point<'a> {
     pos: sf::Vector2f,
     idle_circle: sf::CircleShape<'a>,
     selection_circle: sf::CircleShape<'a>,
+    is_selected: bool,
+
+    // Defines edge constraint of en edge created by this point and the next point in a proper
+    // polygon points vector.
+    // None by default, None means that a polygon that point is the part of is not proper or
+    // that there is no constraint on that edge.
+    edge_constraint: EdgeConstraint,
 }
 
 impl<'a> Point<'a> {
@@ -37,6 +53,8 @@ impl<'a> Point<'a> {
             idle_circle,
             pos,
             selection_circle,
+            is_selected: false,
+            edge_constraint: EdgeConstraint::None,
         }
     }
 
@@ -60,6 +78,8 @@ impl<'a> Clone for Point<'a> {
             pos: self.pos.clone(),
             idle_circle: self.idle_circle.clone(),
             selection_circle: self.selection_circle.clone(),
+            is_selected: self.is_selected.clone(),
+            edge_constraint: self.edge_constraint.clone(),
         }
     }
 }
@@ -549,24 +569,17 @@ impl<'a> PolygonBuilder<'a> {
     }
 }
 
-pub enum EdgeConstraint {
-    None,
-    Horizontal,
-    Vertical,
-}
+static mut CURR_POLYGONOBJ_ID: usize = 0;
 
 pub struct PolygonObject<'a> {
     raw_polygon: Polygon<'a>,
 
+    id: usize,
+
     // Selection
-    //selection: Vec<(bool, sf::CircleShape<'a>)>,
     selection: HashSet<usize>,
 
     show_hover: bool,
-
-    // Constraints
-
-    // line_constraints: HashMap<usize, EdgeConstraint>,
 
     // Point hover
     is_point_hovered: bool,
@@ -602,12 +615,19 @@ impl<'a> PolygonObject<'a> {
         remove_circle.set_fill_color(POINT_DETECTION_COLOR_INCORRECT);
         remove_circle.set_origin(sf::Vector2f::new(POINT_DETECTION_RADIUS, POINT_DETECTION_RADIUS));
 
+        let mut id = 0;
+        unsafe {
+            id = CURR_POLYGONOBJ_ID;
+            CURR_POLYGONOBJ_ID += 1;
+        }
+
         PolygonObject {
             raw_polygon: raw,
             selection: HashSet::new(),
             show_hover: false,
             is_point_hovered: false,
             hovered_point_id: 0,
+            id,
             hover_circle,
             insert_circle,
             can_insert: false,
@@ -633,11 +653,6 @@ impl<'a> PolygonObject<'a> {
         }
 
         self.raw_polygon.insert_point(id, pos);
-        let mut circle = sf::CircleShape::new(POINT_DETECTION_RADIUS, 20);
-        circle.set_radius(POINT_DETECTION_RADIUS);
-        circle.set_origin(sf::Vector2f::new(POINT_DETECTION_RADIUS, POINT_DETECTION_RADIUS));
-        circle.set_fill_color(POINT_SELECTED_COLOR);
-
         self.can_insert = false;
         Ok(())
     }
@@ -658,9 +673,9 @@ impl<'a> PolygonObject<'a> {
 
             self.selection.remove(&0);
             self.selection.remove(&(self.raw_polygon.points_count() - 1));
-            self.selection.insert(*self.selection.get(&0).unwrap());
         } else {
             self.raw_polygon.remove_point(id);
+
             self.selection.remove(&id);
         }
 
@@ -790,10 +805,16 @@ impl<'a> PolygonObject<'a> {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
         }
 
-        if id == 0 || id == self.raw_polygon.points_count() - 1 {
+        let last_id = self.raw_polygon.points_count() - 1;
+        if id == 0 || id == last_id {
+            self.raw_polygon.points[0].is_selected = true;
+            self.raw_polygon.points[last_id].is_selected = true;
+
             self.selection.insert(0);
-            self.selection.insert(self.raw_polygon.points_count() - 1);
+            self.selection.insert(last_id);
         } else {
+            self.raw_polygon.points[id].is_selected = true;
+
             self.selection.insert(id);
         }
 
@@ -806,7 +827,7 @@ impl<'a> PolygonObject<'a> {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
         }
 
-        Ok(self.selection.get(&id).is_some())
+        Ok(self.raw_polygon.points[id].is_selected)
     }
 
     pub fn is_line_selected(&self, first_id: usize) -> Result<bool, io::Error> {
@@ -814,17 +835,23 @@ impl<'a> PolygonObject<'a> {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
         }
 
-        Ok(self.selection.get(&first_id).is_some() && self.selection.get(&(first_id + 1)).is_some())
+        Ok(self.raw_polygon.points[first_id].is_selected && self.raw_polygon.points[first_id + 1].is_selected)
     }
 
     pub fn deselect_all_points(&mut self) {
+        for id in self.selection.iter() {
+            self.raw_polygon.points[*id].is_selected = false;
+        }
         self.selection.clear();
     }
+
     pub fn select_all_points(&mut self) {
         for id in 0..self.raw_polygon.points_count() {
+            self.raw_polygon.points[id].is_selected = true;
             self.selection.insert(id);
         }
     }
+
     pub fn selected_points_count(&self) -> usize {
         self.selection.len()
     }
@@ -835,10 +862,16 @@ impl<'a> PolygonObject<'a> {
             return Err(io::Error::new(io::ErrorKind::InvalidInput, "Index out of range"));
         }
 
-        if id == 0 || id == self.raw_polygon.points_count() - 1 {
+        let last_id = self.raw_polygon.points_count() - 1;
+        if id == 0 || id == last_id {
+            self.raw_polygon.points[0].is_selected = false;
+            self.raw_polygon.points[last_id].is_selected = false;
+
             self.selection.remove(&0);
             self.selection.remove(&(self.raw_polygon.points_count() - 1));
         } else {
+            self.raw_polygon.points[id].is_selected = false;
+
             self.selection.remove(&id);
         }
 
@@ -869,5 +902,33 @@ impl<'a> PolygonObject<'a> {
         for id in self.selection.iter() {
             self.raw_polygon.points[*id].draw_selection_circle(target);
         }
+    }
+
+    pub fn draw_egui(&mut self, ui: &mut egui::Ui) {
+        egui::CollapsingHeader::new(format!("Polygon {}", self.id))
+            .default_open(true)
+            .show(ui, |ui| {
+                for id in self.selection.iter() {
+                    if *id == self.raw_polygon.points_count() - 1 {
+                        continue;
+                    }
+
+                    if self.raw_polygon.points[*id + 1].is_selected {
+                        // Pick the drawing method
+
+                        egui::ComboBox::from_label(format!("({}, {}) Constraint", *id, *id + 1))
+                            .selected_text(match self.raw_polygon.points[*id].edge_constraint {
+                                EdgeConstraint::None => "None",
+                                EdgeConstraint::Horizontal => "Horizontal",
+                                EdgeConstraint::Vertical => "Vertical"
+                            })
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut self.raw_polygon.points[*id].edge_constraint, EdgeConstraint::None, "None");
+                                ui.selectable_value(&mut self.raw_polygon.points[*id].edge_constraint, EdgeConstraint::Horizontal, "Horizontal");
+                                ui.selectable_value(&mut self.raw_polygon.points[*id].edge_constraint, EdgeConstraint::Vertical, "Vertical");
+                            });
+                    }
+                }
+            });
     }
 }

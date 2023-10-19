@@ -300,6 +300,12 @@ impl Application<'_> {
             if ui.button("Cancel").clicked() {
                 self.curr_state = Some(self.curr_state.take().unwrap().on_cancel_btn(&mut self.app_ctx));
             }
+
+            ui.separator();
+
+            for poly in self.app_ctx.polygons.iter_mut() {
+                poly.draw_egui(ui);
+            }
         });
     }
 }
