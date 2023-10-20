@@ -2,7 +2,7 @@ use std::io;
 use std::ops::Add;
 use sfml::system::Vector2f;
 use super::sf;
-use super::AppContext;
+use super::app::AppContext;
 
 pub trait State {
     fn on_left_mouse_clicked(self: Box<Self>, mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> Box<dyn State>;

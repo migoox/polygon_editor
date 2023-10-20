@@ -1,7 +1,7 @@
 pub mod raw_polygon;
 
 use std::io;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use egui_sfml::egui;
 use sfml::graphics::{Drawable, RenderTarget, Shape, Transformable};
 use super::sf;
@@ -362,7 +362,7 @@ impl<'a> PolygonObject<'a> {
         for i in 0..self.raw_polygon.points_count() as isize {
             if my_math::distance(&self.raw_polygon.get_point_pos(i), &pos) <= style::POINT_DETECTION_RADIUS {
                 self.hover_circle.set_position(self.raw_polygon.get_point_pos(i).clone());
-                self.hovered_point_id = i as usize;
+                self.hovered_point_id = self.raw_polygon.fix_index(i);
                 self.is_point_hovered = true;
                 return;
             }
@@ -396,7 +396,7 @@ impl<'a> PolygonObject<'a> {
                 self.hover_quad.set_point(1, self.raw_polygon.get_point_pos(i + 1) + proj_norm * style::LINE_THICKNESS / 2.);
                 self.hover_quad.set_point(2, self.raw_polygon.get_point_pos(i + 1) - proj_norm * style::LINE_THICKNESS / 2.);
                 self.hover_quad.set_point(3, self.raw_polygon.get_point_pos(i) - proj_norm * style::LINE_THICKNESS / 2.);
-                self.hovered_line_id = i as usize;
+                self.hovered_line_id = self.raw_polygon.fix_index(i);
                 self.is_line_hovered = true;
                 return;
             }
@@ -445,21 +445,84 @@ impl<'a> PolygonObject<'a> {
     }
 
     pub fn get_hovered_line_ids(&self) -> (usize, usize) {
-        (self.hovered_line_id, self.hovered_line_id + 1)
+        (self.hovered_line_id, self.raw_polygon.fix_index(self.hovered_line_id as isize + 1))
     }
 
     pub fn select_point(&mut self, id: isize) {
         self.raw_polygon.select_point(id);
         self.selection.insert(self.raw_polygon.fix_index(id));
+
+        let id = self.raw_polygon.fix_index(id) as isize;
+
+        let mut i = id;
+        while self.raw_polygon.get_edge_constraint(i) != EdgeConstraint::None {
+            self.raw_polygon.select_point(i);
+            self.selection.insert(self.raw_polygon.fix_index(i));
+
+            self.raw_polygon.select_point(i + 1);
+            self.selection.insert(self.raw_polygon.fix_index(i + 1));
+
+            i = self.raw_polygon.fix_index(i + 1) as isize;
+
+            if id == i {
+                break;
+            }
+        }
+
+        let mut i = id - 1;
+        while self.raw_polygon.get_edge_constraint(i) != EdgeConstraint::None {
+            self.raw_polygon.select_point(i);
+            self.selection.insert(self.raw_polygon.fix_index(i));
+
+            self.raw_polygon.select_point(i + 1);
+            self.selection.insert(self.raw_polygon.fix_index(i + 1));
+
+            i = self.raw_polygon.fix_index(i - 1) as isize;
+
+            if id == i {
+                break;
+            }
+        }
     }
 
-    pub fn is_point_selected(&self, id: isize) -> bool {
-        self.raw_polygon.is_point_selected(id)
+    pub fn deselect_point(&mut self, id: isize) {
+        self.raw_polygon.deselect_point(id);
+        self.selection.remove(&self.raw_polygon.fix_index(id));
+
+
+        let id = self.raw_polygon.fix_index(id) as isize;
+
+        let mut i = id;
+        while self.raw_polygon.get_edge_constraint(i) != EdgeConstraint::None {
+            self.raw_polygon.deselect_point(i);
+            self.selection.remove(&self.raw_polygon.fix_index(i));
+
+            self.raw_polygon.deselect_point(i + 1);
+            self.selection.remove(&self.raw_polygon.fix_index(i + 1));
+
+            i = self.raw_polygon.fix_index(i + 1) as isize;
+
+            if id == i {
+                break;
+            }
+        }
+
+        let mut i = id - 1;
+        while self.raw_polygon.get_edge_constraint(i) != EdgeConstraint::None {
+            self.raw_polygon.deselect_point(i);
+            self.selection.remove(&self.raw_polygon.fix_index(i));
+
+            self.raw_polygon.deselect_point(i + 1);
+            self.selection.remove(&self.raw_polygon.fix_index(i + 1));
+
+            i = self.raw_polygon.fix_index(i - 1) as isize;
+
+            if id == i {
+                break;
+            }
+        }
     }
 
-    pub fn is_line_selected(&self, first_id: isize) -> bool {
-        self.raw_polygon.is_point_selected(first_id) && self.raw_polygon.is_point_selected(first_id)
-    }
 
     pub fn deselect_all_points(&mut self) {
         for id in self.selection.iter() {
@@ -475,14 +538,18 @@ impl<'a> PolygonObject<'a> {
         }
     }
 
+    pub fn is_point_selected(&self, id: isize) -> bool {
+        self.raw_polygon.is_point_selected(id)
+    }
+
+    pub fn is_line_selected(&self, first_id: isize) -> bool {
+        self.raw_polygon.is_point_selected(first_id) && self.raw_polygon.is_point_selected(first_id + 1)
+    }
+
     pub fn selected_points_count(&self) -> usize {
         self.selection.len()
     }
 
-    pub fn deselect_point(&mut self, id: isize) {
-        self.raw_polygon.deselect_point(id);
-        self.selection.remove(&self.raw_polygon.fix_index(id));
-    }
 
     pub fn move_selected_points(&mut self, vec: sf::Vector2f) {
         for id in self.selection.iter() {
@@ -509,8 +576,6 @@ impl<'a> PolygonObject<'a> {
             self.raw_polygon.draw_point_selection(*id as isize, target);
         }
     }
-
-    // id must be less than points_count - 1
 
     pub fn draw_egui(&mut self, ui: &mut egui::Ui) {
         egui::CollapsingHeader::new(format!("Polygon {}", self.id))
