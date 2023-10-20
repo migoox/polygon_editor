@@ -162,7 +162,13 @@ impl<'a> Polygon<'a> {
         self.points[self.fix_index(id)].pos
     }
 
-
+    pub fn get_edge_constraint(&self, id: isize) -> EdgeConstraint {
+        self.points[self.fix_index(id)].edge_constraint.clone()
+    }
+    pub fn set_edge_contsraint(&mut self, id: isize, constraint: EdgeConstraint) {
+        let id = self.fix_index(id);
+        self.points[id].edge_constraint = constraint;
+    }
     pub fn push_point_with_pos(&mut self, point_pos: sf::Vector2f) {
         self.points.push(Point::new(point_pos));
         self.generate_lines_vb();

@@ -513,57 +513,65 @@ impl<'a> PolygonObject<'a> {
     // id must be less than points_count - 1
 
     pub fn draw_egui(&mut self, ui: &mut egui::Ui) {
-        //
-        // egui::CollapsingHeader::new(format!("Polygon {}", self.id))
-        //     .default_open(true)
-        //     .show(ui, |ui| {
-        //         for id in self.selection.iter() {
-        //             if *id == self.raw_polygon.points_count() - 1 {
-        //                 continue;
-        //             }
-        //
-        //             if self.raw_polygon.points[*id + 1].is_selected {
-        //                 // Pick the drawing method
-        //                 let mut old = self.raw_polygon.points[*id].edge_constraint.clone();
-        //
-        //                 egui::ComboBox::from_label(format!("({}, {}) Constraint", *id, *id + 1))
-        //                     .selected_text(match self.raw_polygon.points[*id].edge_constraint {
-        //                         EdgeConstraint::None => "None",
-        //                         EdgeConstraint::Horizontal => "Horizontal",
-        //                         EdgeConstraint::Vertical => "Vertical"
-        //                     })
-        //                     .show_ui(ui, |ui| {
-        //                         ui.selectable_value(&mut self.raw_polygon.points[*id].edge_constraint, EdgeConstraint::None, "None");
-        //                         ui.selectable_value(&mut self.raw_polygon.points[*id].edge_constraint, EdgeConstraint::Horizontal, "Horizontal");
-        //                         ui.selectable_value(&mut self.raw_polygon.points[*id].edge_constraint, EdgeConstraint::Vertical, "Vertical");
-        //                     });
-        //
-        //                 if old != self.raw_polygon.points[*id].edge_constraint {
-        //                     println!("CHANGED");
-        //                     match self.raw_polygon.points[*id].edge_constraint {
-        //                         EdgeConstraint::Horizontal => {
-        //                             let old_p0 = self.raw_polygon.points[*id].pos;
-        //                             let old_p1 = self.raw_polygon.points[*id + 1].pos;
-        //
-        //                             let avg = (old_p0 + old_p1);
-        //                             let len = distance(&old_p0, &old_p1);
-        //
-        //                             self.raw_polygon.points[*id].pos = (avg + sf::Vector2f::new(-len, 0.)) / 2.;
-        //                             self.raw_polygon.points[*id + 1].pos = (avg + sf::Vector2f::new(len, 0.)) / 2.;
-        //
-        //                             let _err = self.raw_polygon.update_point_pos(self.raw_polygon.points[*id].pos, *id);
-        //                             let _err = self.raw_polygon.update_point_pos(self.raw_polygon.points[*id + 1].pos, *id + 1);
-        //
-        //                             if *id == 0 {
-        //                                 let _err = self.raw_polygon.update_point_pos(self.raw_polygon.points[0].pos, self.raw_polygon.points_count() - 1);
-        //                             }
-        //                         }
-        //                         EdgeConstraint::Vertical => {}
-        //                         EdgeConstraint::None => (),
-        //                     }
-        //                 }
-        //             }
-        //         }
-        //     });
+        egui::CollapsingHeader::new(format!("Polygon {}", self.id))
+            .default_open(true)
+            .show(ui, |ui| {
+                for id in self.selection.iter() {
+                    if self.raw_polygon.is_point_selected(*id as isize + 1) {
+                        let line0 = self.raw_polygon.fix_index(*id as isize) as isize;
+                        let line1 = self.raw_polygon.fix_index(*id as isize + 1) as isize;
+                        // Pick the drawing method
+                        let mut old = self.raw_polygon.get_edge_constraint(line0);
+                        let mut new = old.clone();
+
+                        egui::ComboBox::from_label(format!("({}, {}) Constraint", line0, line1))
+                            .selected_text(match new {
+                                EdgeConstraint::None => "None",
+                                EdgeConstraint::Horizontal => "Horizontal",
+                                EdgeConstraint::Vertical => "Vertical"
+                            })
+                            .show_ui(ui, |ui| {
+                                ui.selectable_value(&mut new, EdgeConstraint::None, "None");
+                                ui.selectable_value(&mut new, EdgeConstraint::Horizontal, "Horizontal");
+                                ui.selectable_value(&mut new, EdgeConstraint::Vertical, "Vertical");
+                            });
+
+                        if old != new {
+                            if new != EdgeConstraint::None &&
+                                (new == self.raw_polygon.get_edge_constraint(line0 - 1) ||
+                                    new == self.raw_polygon.get_edge_constraint(line1)) {
+                                continue;
+                            }
+                            self.raw_polygon.set_edge_contsraint(line0, new.clone());
+
+                            match new {
+                                EdgeConstraint::Horizontal => {
+                                    let old_p0 = self.raw_polygon.get_point_pos(line0);
+                                    let old_p1 = self.raw_polygon.get_point_pos(line1);
+                                    let avg = (old_p0.y + old_p1.y) / 2.;
+                                    self.raw_polygon.update_point_pos(sf::Vector2f::new(old_p0.x, avg), line0);
+                                    self.raw_polygon.update_point_pos(sf::Vector2f::new(old_p1.x, avg), line1);
+                                    if self.raw_polygon.is_self_crossing() {
+                                        self.raw_polygon.update_point_pos(old_p0, line0);
+                                        self.raw_polygon.update_point_pos(old_p1, line1);
+                                    }
+                                }
+                                EdgeConstraint::Vertical => {
+                                    let old_p0 = self.raw_polygon.get_point_pos(line0);
+                                    let old_p1 = self.raw_polygon.get_point_pos(line1);
+                                    let avg = (old_p0.x + old_p1.x) / 2.;
+                                    self.raw_polygon.update_point_pos(sf::Vector2f::new(avg, old_p0.y), line0);
+                                    self.raw_polygon.update_point_pos(sf::Vector2f::new(avg, old_p1.y), line1);
+                                    if self.raw_polygon.is_self_crossing() {
+                                        self.raw_polygon.update_point_pos(old_p0, line0);
+                                        self.raw_polygon.update_point_pos(old_p1, line1);
+                                    }
+                                }
+                                EdgeConstraint::None => (),
+                            }
+                        }
+                    }
+                }
+            });
     }
 }
