@@ -89,7 +89,7 @@ impl<'a> PolygonBuilder<'a> {
             self.update_line(point, point);
             self.new_point_circle.set_position(point);
 
-            self.curr_id += self.curr_id;
+            self.curr_id += 1;
             return;
         }
 
