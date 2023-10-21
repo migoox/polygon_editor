@@ -1,3 +1,4 @@
+use sfml::system::Vector2f;
 use super::sf;
 
 pub fn distance(point1: &sf::Vector2f, point2: &sf::Vector2f) -> f32 {
@@ -20,4 +21,8 @@ pub fn vec_norm(vec: &sf::Vector2f) -> sf::Vector2f {
 
 pub fn dot_prod(vec1: &sf::Vector2f, vec2: &sf::Vector2f) -> f32 {
     vec1.x * vec2.x + vec1.y * vec2.y
+}
+
+pub fn cross2(vec1: &sf::Vector2f, vec2: &sf::Vector2f) -> f32 {
+    return (vec1.x * vec2.y) - (vec1.y * vec2.x);
 }

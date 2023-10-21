@@ -1,7 +1,13 @@
-use std::io;
-use sfml::graphics::{Drawable, RenderTarget, Shape, Transformable};
+use std::cell::RefCell;
+use std::ops::Deref;
+use std::rc::Rc;
+use sfml::graphics::{Drawable, RcFont, RcText, RcTexture, RenderTarget, Shape, Transformable};
+use sfml::SfBox;
+use crate::my_math::cross2;
+use crate::style::CONSTRAINT_SPRITE_SIZE;
 use super::sf;
 use super::style;
+use super::my_math;
 
 #[derive(Clone)]
 #[derive(PartialEq)]
@@ -22,6 +28,8 @@ struct Point<'a> {
     // None by default, None means that a polygon that point is the part of is not proper or
     // that there is no constraint on that edge.
     edge_constraint: EdgeConstraint,
+
+    direction: sf::Vector2f,
 }
 
 impl<'a> Point<'a> {
@@ -42,13 +50,35 @@ impl<'a> Point<'a> {
             selection_circle,
             is_selected: false,
             edge_constraint: EdgeConstraint::None,
+            direction: sf::Vector2f::new(0., 0.),
         }
     }
 
+    pub fn get_dir(&self) -> sf::Vector2f {
+        return self.direction;
+    }
     pub fn update_pos(&mut self, pos: sf::Vector2f) {
         self.pos = pos;
         self.selection_circle.set_position(pos);
         self.point_circle.set_position(pos);
+    }
+
+    pub fn update_normals(&mut self, prev: sf::Vector2f, next: sf::Vector2f) {
+        let v01 = self.pos - prev;
+        let v12 = next - self.pos;
+
+
+        let v01_perp = sf::Vector2f::new(-v01.y, v01.x);
+        let v12_perp = sf::Vector2f::new(-v12.y, v12.x);
+
+        let v01_perp = my_math::vec_norm(&v01_perp);
+        let v12_perp = my_math::vec_norm(&v12_perp);
+
+        if cross2(&v01, &v12) < 0. {
+            self.direction = my_math::vec_norm(&(v01_perp + v12_perp));
+        } else {
+            self.direction = -my_math::vec_norm(&(v01_perp + v12_perp));
+        }
     }
 
     pub fn draw_selection_circle(&self, target: &mut dyn sf::RenderTarget) {
@@ -67,6 +97,7 @@ impl<'a> Clone for Point<'a> {
             selection_circle: self.selection_circle.clone(),
             is_selected: self.is_selected.clone(),
             edge_constraint: self.edge_constraint.clone(),
+            direction: self.direction.clone(),
         }
     }
 }
@@ -76,6 +107,16 @@ pub struct Polygon<'a> {
     lines_vb: sf::VertexBuffer,
     edges_color: sf::Color,
     show_last_line: bool,
+
+    edge_constraint_sprites: Vec<sf::RcSprite>,
+    points_labels: Vec<sf::RcText>,
+
+    nametag: Option<sf::RcText>,
+
+    name: String,
+    // Resources references
+    constraint_texture: Option<Rc<sf::RcTexture>>,
+    font: Option<Rc<sf::RcFont>>,
 }
 
 
@@ -86,7 +127,82 @@ impl<'a> Polygon<'a> {
             lines_vb: sf::VertexBuffer::new(sf::PrimitiveType::LINE_STRIP, 0, sf::VertexBufferUsage::DYNAMIC),
             edges_color: style::LINES_COLOR,
             show_last_line: true,
+            edge_constraint_sprites: Vec::new(),
+            points_labels: Vec::new(),
+            constraint_texture: None,
+            font: None,
+            nametag: None,
+            name: "Polygon".to_string(),
         }
+    }
+
+    pub fn find_center(&self) -> sf::Vector2f {
+        let mut result = sf::Vector2f::new(0., 0.);
+        for point in self.points.iter() {
+            result += point.pos;
+        }
+        return result / (self.points_count() as f32);
+    }
+    pub fn set_name(&mut self, name: String) {
+        self.name = name;
+        if self.font.is_some() {
+            self.nametag = Some(sf::RcText::new(&self.name, self.font.as_ref().unwrap(), 20));
+            let p = self.find_center();
+            self.nametag.as_mut().unwrap().set_position(p);
+        }
+    }
+    pub fn get_name(&self) -> &String {
+        &self.name
+    }
+    pub fn set_label_resources(&mut self, constraint_texture: &Rc<sf::RcTexture>, font: &Rc<sf::RcFont>) {
+        self.constraint_texture = Some(Rc::clone(constraint_texture));
+        self.font = Some(Rc::clone(font));
+        self.nametag = Some(sf::RcText::new(&self.name, self.font.as_ref().unwrap(), 20));
+        let p = self.find_center();
+        self.nametag.as_mut().unwrap().set_position(p);
+        self.update_normals();
+        self.update_labels();
+    }
+
+    pub fn update_normals(&mut self) {
+        for i in 0..self.points_count() {
+            let prev = self.get_point_pos(i as isize - 1);
+            let next = self.get_point_pos(i as isize + 1);
+            self.points[i].update_normals(prev, next);
+        }
+    }
+    pub fn update_labels(&mut self) {
+        if self.constraint_texture.is_some() {
+            self.edge_constraint_sprites.resize(self.points_count(), sf::RcSprite::with_texture(self.constraint_texture.as_ref().unwrap()));
+
+            for id in 0..self.edge_constraint_sprites.len() {
+                self.edge_constraint_sprites[id].set_origin(style::CONSTRAINT_SPRITE_SIZE / 2.);
+                let pos = (self.get_point_pos(id as isize) + self.get_point_pos(id as isize + 1)) / 2.;
+                self.edge_constraint_sprites[id].set_position(pos);
+            }
+        }
+
+        if self.font.is_some() {
+            for i in 0..(self.points_count() - self.points_labels.len()) {
+                self.points_labels.push(sf::RcText::new((&format!("{}", self.points_labels.len() + i)), self.font.as_ref().unwrap(), 20));
+                let id = self.points_labels.len() - 1;
+                let center = self.points_labels[id].global_bounds().size() / 2.;
+                self.points_labels[id].set_origin(center);
+            }
+            self.points_labels.resize(self.points_count(), sf::RcText::new("0", self.font.as_ref().unwrap(), 20));
+
+            for id in 0..self.points_labels.len() {
+                let pos = self.get_point_pos(id as isize);
+                let vec = self.points[id].direction * 26.0;
+                self.points_labels[id].set_position(pos + vec);
+            }
+            let p = self.find_center();
+            self.nametag.as_mut().unwrap().set_position(p);
+        }
+    }
+
+    pub fn generate_labels(&mut self) {
+        self.edge_constraint_sprites.clone();
     }
 
     pub fn new_with_start_point(point: sf::Vector2f) -> Polygon<'a> {
@@ -172,18 +288,24 @@ impl<'a> Polygon<'a> {
     pub fn push_point_with_pos(&mut self, point_pos: sf::Vector2f) {
         self.points.push(Point::new(point_pos));
         self.generate_lines_vb();
+        self.update_normals();
+        self.update_labels();
     }
 
     /// Inserts at "id" index. "id" is cyclic.
     pub fn insert_point_with_pos(&mut self, id: isize, point_pos: sf::Vector2f) {
         self.points.insert(self.fix_index(id), Point::new(point_pos));
         self.generate_lines_vb();
+        self.update_normals();
+        self.update_labels();
     }
 
     /// Removes a point with the given id
     pub fn remove_point(&mut self, id: isize) {
         self.points.remove(self.fix_index(id));
         self.generate_lines_vb();
+        self.update_normals();
+        self.update_labels();
     }
 
 
@@ -214,6 +336,8 @@ impl<'a> Polygon<'a> {
                 color,
                 sf::Vector2f::new(0.0, 0.0))], index as u32);
         }
+        self.update_normals();
+        self.update_labels();
     }
 
     fn update_last_vertex(&mut self, point_pos: sf::Vector2f, color: sf::Color) {
@@ -335,8 +459,25 @@ impl<'a> Polygon<'a> {
             point.draw_point_circle(target);
         }
     }
+
     pub fn draw_point_selection(&self, id: isize, target: &mut dyn sf::RenderTarget) {
         self.points[self.fix_index(id)].draw_selection_circle(target);
+    }
+
+    pub fn draw_labels(&self, target: &mut dyn sf::RenderTarget) {
+        for (id, sprite) in self.edge_constraint_sprites.iter().enumerate() {
+            if self.points[id].edge_constraint != EdgeConstraint::None {
+                target.draw(sprite);
+            }
+        }
+
+        for point in self.points_labels.iter() {
+            target.draw(point);
+        }
+
+        if self.nametag.is_some() {
+            target.draw(self.nametag.as_ref().unwrap());
+        }
     }
 
     pub fn draw_edges_bresenham(&self, _img_target: &mut sf::Image) {
@@ -346,11 +487,28 @@ impl<'a> Polygon<'a> {
 
 impl<'a> Clone for Polygon<'a> {
     fn clone(&self) -> Self {
+        let mut new_txt: Option<Rc<RcTexture>> = None;
+        let mut new_font: Option<Rc<RcFont>> = None;
+
+        if self.constraint_texture.is_some() {
+            new_txt = Some(Rc::clone(&self.constraint_texture.as_ref().unwrap()));
+        }
+
+        if self.font.is_some() {
+            new_font = Some(Rc::clone(&self.font.as_ref().unwrap()));
+        }
+
         Polygon {
             points: self.points.clone(),
             lines_vb: self.lines_vb.clone(),
             edges_color: self.edges_color.clone(),
             show_last_line: self.show_last_line.clone(),
+            edge_constraint_sprites: self.edge_constraint_sprites.clone(),
+            points_labels: self.points_labels.clone(),
+            constraint_texture: new_txt,
+            font: new_font,
+            nametag: self.nametag.clone(),
+            name: self.name.clone(),
         }
     }
 }

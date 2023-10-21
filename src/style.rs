@@ -1,3 +1,9 @@
+use std::io::WriterPanicked;
+use std::ops::Deref;
+use std::ptr::NonNull;
+use std::sync::{Mutex, Once, OnceLock, RwLock};
+use sfml::graphics::Texture;
+use sfml::LoadResult;
 use super::sf;
 
 pub const LINE_THICKNESS: f32 = 2.0;
@@ -13,3 +19,7 @@ pub const POINT_DETECTION_COLOR_INCORRECT: sf::Color = sf::Color::rgb(237, 123, 
 pub const POINT_SELECTED_COLOR: sf::Color = sf::Color::rgb(167, 187, 236);
 
 pub const BACKGROUND_COLOR: sf::Color = sf::Color::rgb(37, 43, 72);
+
+
+pub const CONSTRAINT_SPRITE_SIZE: sf::Vector2f = sf::Vector2f::new(32., 32.);
+

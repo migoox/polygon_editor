@@ -9,8 +9,12 @@ name = "polygon_editor"
 src = "src/main.rs"
 
 [dependencies]
-sfml = "0.20.0"
-egui-sfml = "0.4.0"
 rand = "0.8.5"
 line_intersection = "0.4.0"
 geo = "0.26.0"
+
+[dependencies.sfml]
+git = "https://github.com/jeremyletang/rust-sfml.git"
+
+[dependencies.egui-sfml]
+git = "https://github.com/crumblingstatue/egui-sfml.git"
