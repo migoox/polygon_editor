@@ -482,7 +482,7 @@ impl<'a> Polygon<'a> {
         }
     }
 
-
+    // d, incr_d_e, incr_d_ne, win_e, win_ne, steep
     fn get_bresenham_parameters(&self, slope: f32, delta: sf::Vector2i) -> (i32, i32, i32, sf::Vector2i, sf::Vector2i, bool) {
         if slope >= 0. && slope <= 1. {
             return (2 * delta.y - delta.x, 2 * delta.y, 2 * delta.y - 2 * delta.x, sf::Vector2i::new(1, 0), sf::Vector2i::new(1, 1), false);
@@ -545,7 +545,11 @@ impl<'a> Polygon<'a> {
     }
 
     pub fn draw_edges_bresenham(&self, img_target: &mut sf::Image) {
-        for i in 0..self.points_count() as isize {
+        let mut end = self.points_count();
+        if !self.show_last_line {
+            end -= 1;
+        }
+        for i in 0..end as isize {
             self.bresenham_line(self.get_point_pos(i), self.get_point_pos(i + 1), img_target);
         }
     }
