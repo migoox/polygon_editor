@@ -630,23 +630,29 @@ impl<'a> PolygonObject<'a> {
                             EdgeConstraint::Horizontal => {
                                 let old_p0 = self.raw_polygon.get_point_pos(line0);
                                 let old_p1 = self.raw_polygon.get_point_pos(line1);
-                                let avg = (old_p0.y + old_p1.y) / 2.;
-                                self.raw_polygon.update_point_pos(sf::Vector2f::new(old_p0.x, avg), line0);
-                                self.raw_polygon.update_point_pos(sf::Vector2f::new(old_p1.x, avg), line1);
+                                let avg = (old_p0 + old_p1) / 2.;
+                                let len = my_math::distance(&old_p0, &old_p1) / 2.;
+
+                                self.raw_polygon.update_point_pos(sf::Vector2f::new(avg.x + len, avg.y), line0);
+                                self.raw_polygon.update_point_pos(sf::Vector2f::new(avg.x - len, avg.y), line1);
                                 if self.raw_polygon.is_self_crossing() {
                                     self.raw_polygon.update_point_pos(old_p0, line0);
                                     self.raw_polygon.update_point_pos(old_p1, line1);
+                                    self.raw_polygon.set_edge_contsraint(line0, old);
                                 }
                             }
                             EdgeConstraint::Vertical => {
                                 let old_p0 = self.raw_polygon.get_point_pos(line0);
                                 let old_p1 = self.raw_polygon.get_point_pos(line1);
-                                let avg = (old_p0.x + old_p1.x) / 2.;
-                                self.raw_polygon.update_point_pos(sf::Vector2f::new(avg, old_p0.y), line0);
-                                self.raw_polygon.update_point_pos(sf::Vector2f::new(avg, old_p1.y), line1);
+                                let avg = (old_p0 + old_p1) / 2.;
+                                let len = my_math::distance(&old_p0, &old_p1) / 2.;
+
+                                self.raw_polygon.update_point_pos(sf::Vector2f::new(avg.x, avg.y + len), line0);
+                                self.raw_polygon.update_point_pos(sf::Vector2f::new(avg.x, avg.y - len), line1);
                                 if self.raw_polygon.is_self_crossing() {
                                     self.raw_polygon.update_point_pos(old_p0, line0);
                                     self.raw_polygon.update_point_pos(old_p1, line1);
+                                    self.raw_polygon.set_edge_contsraint(line0, old);
                                 }
                             }
                             EdgeConstraint::None => (),

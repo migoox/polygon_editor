@@ -391,23 +391,21 @@ impl<'a> Polygon<'a> {
     }
 
     pub fn is_self_crossing(&self) -> bool {
-        // TODO: Fix
-        for i in 0..(self.points_count() - 2) {
+        for i in 0..self.points_count() as isize {
             let line1 = geo::geometry::Line::new(
-                geo::coord! {x: self.points[i].pos.x, y: self.points[i].pos.y},
-                geo::coord! {x: self.points[i + 1].pos.x, y: self.points[i + 1].pos.y},
+                geo::coord! {x: self.get_point_pos(i).x, y: self.get_point_pos(i).y},
+                geo::coord! {x: self.get_point_pos(i + 1).x, y: self.get_point_pos(i + 1).y},
             );
 
-            let mut end = self.points_count() - 1;
+            let mut end = self.points_count() as isize;
             if i == 0 {
-                end = self.points_count() - 2;
+                end -= 1;
             }
-
             // Do not check neighbor lines
             for j in (i + 2)..end {
                 let line2 = geo::geometry::Line::new(
-                    geo::coord! {x: self.points[j].pos.x, y: self.points[j].pos.y},
-                    geo::coord! {x: self.points[j + 1].pos.x, y: self.points[j + 1].pos.y},
+                    geo::coord! {x: self.get_point_pos(j).x, y: self.get_point_pos(j).y},
+                    geo::coord! {x: self.get_point_pos(j + 1).x, y: self.get_point_pos(j + 1).y},
                 );
 
                 let result = geo::algorithm::line_intersection::line_intersection(
