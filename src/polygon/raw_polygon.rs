@@ -1,8 +1,10 @@
 use std::cell::RefCell;
+use std::cmp::{max, min};
 use std::ops::Deref;
 use std::rc::Rc;
 use sfml::graphics::{Drawable, RcFont, RcText, RcTexture, RenderTarget, Shape, Transformable};
 use sfml::SfBox;
+use sfml::system::{Vector2f, Vector2i};
 use crate::my_math::cross2;
 use crate::style::CONSTRAINT_SPRITE_SIZE;
 use super::sf;
@@ -480,8 +482,72 @@ impl<'a> Polygon<'a> {
         }
     }
 
-    pub fn draw_edges_bresenham(&self, _img_target: &mut sf::Image) {
-        // TODO
+
+    fn get_bresenham_parameters(&self, slope: f32, delta: sf::Vector2i) -> (i32, i32, i32, sf::Vector2i, sf::Vector2i, bool) {
+        if slope >= 0. && slope <= 1. {
+            return (2 * delta.y - delta.x, 2 * delta.y, 2 * delta.y - 2 * delta.x, sf::Vector2i::new(1, 0), sf::Vector2i::new(1, 1), false);
+        } else if slope >= -1. && slope < 0. {
+            return (2 * delta.y + delta.x, 2 * delta.y + 2 * delta.x, 2 * delta.y, sf::Vector2i::new(1, -1), sf::Vector2i::new(1, 0), false);
+        } else if slope > 1. {
+            return (delta.y - 2 * delta.x, 2 * delta.y - 2 * delta.x, -2 * delta.x, sf::Vector2i::new(1, 1), sf::Vector2i::new(0, 1), true);
+        }
+        (delta.y + 2 * delta.x, 2 * delta.x, 2 * delta.x + 2 * delta.y, sf::Vector2i::new(0, -1), sf::Vector2i::new(1, -1), true)
+    }
+
+    fn bresenham_line(&self, mut p0: sf::Vector2f, mut p1: sf::Vector2f, img_target: &mut sf::Image) {
+        if p1.x < p0.x {
+            std::mem::swap(&mut p0, &mut p1);
+        }
+
+        let p0 = sf::Vector2i::new(p0.x as i32, p0.y as i32);
+        let p1 = sf::Vector2i::new(p1.x as i32, p1.y as i32);
+        let delta = p1 - p0;
+
+        // Slope
+        let m = ((p1.y - p0.y) as f32) / ((p1.x - p0.x) as f32);
+
+        let (mut d, incr_d_e, incr_d_ne, e_win, ne_win, steep) =
+            self.get_bresenham_parameters(m, delta);
+
+        let mut p = p0;
+
+        if steep {
+            while (p1.y - p.y).abs() > 0 {
+                if p.x < img_target.size().x as i32 && p.x >= 0 &&
+                    p.y < img_target.size().y as i32 && p.y >= 0 {
+                    unsafe { img_target.set_pixel(p.x as u32, p.y as u32, self.edges_color) }
+                }
+
+                if d < 0 {
+                    d += incr_d_e;
+                    p += e_win;
+                } else {
+                    d += incr_d_ne;
+                    p += ne_win;
+                }
+            }
+        } else {
+            while p.x < p1.x {
+                if p.x < img_target.size().x as i32 && p.x >= 0 &&
+                    p.y < img_target.size().y as i32 && p.y >= 0 {
+                    unsafe { img_target.set_pixel(p.x as u32, p.y as u32, self.edges_color) }
+                }
+
+                if d < 0 {
+                    d += incr_d_e;
+                    p += e_win;
+                } else {
+                    d += incr_d_ne;
+                    p += ne_win;
+                }
+            }
+        }
+    }
+
+    pub fn draw_edges_bresenham(&self, img_target: &mut sf::Image) {
+        for i in 0..self.points_count() as isize {
+            self.bresenham_line(self.get_point_pos(i), self.get_point_pos(i + 1), img_target);
+        }
     }
 }
 

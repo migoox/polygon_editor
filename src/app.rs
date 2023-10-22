@@ -30,6 +30,7 @@ pub struct AppContext<'a> {
 
 pub struct Application<'a> {
     window: sf::RenderWindow,
+    cpu_drawing_image: sf::Image,
     program_scale: f32,
 
     // Option is required, since we are temporary taking ownership
@@ -49,7 +50,7 @@ pub struct Application<'a> {
 impl Application<'_> {
     pub fn new() -> Application<'static> {
         let mut window = sf::RenderWindow::new(
-            (1280, 760),
+            (style::WIN_SIZE_X, style::WIN_SIZE_Y),
             "Polygon editor",
             sf::Style::CLOSE,
             &Default::default(),
@@ -62,6 +63,7 @@ impl Application<'_> {
         Application {
             window,
             program_scale,
+            cpu_drawing_image: sf::Image::new(style::WIN_SIZE_X, style::WIN_SIZE_Y),
             curr_state: Some(Box::new(IdleState)),
             app_ctx: AppContext {
                 polygons: Vec::new(),
@@ -231,7 +233,36 @@ impl Application<'_> {
                     None => (),
                 }
             }
-            DrawingMode::CPUBresenhamLines => () // TODO
+            DrawingMode::CPUBresenhamLines => {
+                for y in 0..style::WIN_SIZE_Y {
+                    for x in 0..style::WIN_SIZE_X {
+                        unsafe { self.cpu_drawing_image.set_pixel(x, y, style::BACKGROUND_COLOR); }
+                    }
+                }
+
+                for poly in &self.app_ctx.polygons {
+                    poly.raw_polygon().draw_edges_bresenham(&mut self.cpu_drawing_image);
+                }
+
+                match self.app_ctx.polygon_builder.raw_polygon() {
+                    Some(&ref poly) => poly.draw_edges_bresenham(&mut self.cpu_drawing_image),
+                    None => (),
+                }
+
+                let mut texture = sf::Texture::new();
+                let _err = texture.as_mut().unwrap().load_from_image(
+                    &self.cpu_drawing_image,
+                    sf::IntRect::new(
+                        0,
+                        0,
+                        style::WIN_SIZE_X as i32,
+                        style::WIN_SIZE_Y as i32,
+                    ),
+                );
+
+                let sprite = sf::Sprite::with_texture(texture.as_ref().unwrap());
+                self.window.draw(&sprite);
+            }
         };
 
         // Draw points of the polygons
