@@ -69,15 +69,14 @@ impl<'a> Point<'a> {
         let v01 = self.pos - prev;
         let v12 = next - self.pos;
 
-
         let v01_perp = sf::Vector2f::new(-v01.y, v01.x);
         let v12_perp = sf::Vector2f::new(-v12.y, v12.x);
 
         let v01_perp = my_math::vec_norm(&v01_perp);
         let v12_perp = my_math::vec_norm(&v12_perp);
 
-        self.normal = v01_perp;
-        self.prev_normal = v12_perp;
+        self.normal = v12_perp;
+        self.prev_normal = v01_perp;
         self.offset_vec = my_math::vec_norm(&(v01_perp + v12_perp)) /
             ((1. + v01_perp.dot(v12_perp)) / 2.).sqrt();
 
