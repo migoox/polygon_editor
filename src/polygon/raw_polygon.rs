@@ -1,6 +1,6 @@
 use std::rc::Rc;
 use sfml::graphics::{Drawable, RcFont, RcText, RcTexture, RenderTarget, Shape, Transformable};
-use crate::my_math::cross2;
+use crate::my_math::{cross2, vec_norm};
 use super::sf;
 use super::style;
 use super::my_math;
@@ -26,6 +26,9 @@ struct Point<'a> {
     edge_constraint: EdgeConstraint,
 
     direction: sf::Vector2f,
+    normal: sf::Vector2f,
+    prev_normal: sf::Vector2f,
+    offset_vec: sf::Vector2f,
 }
 
 impl<'a> Point<'a> {
@@ -47,6 +50,9 @@ impl<'a> Point<'a> {
             is_selected: false,
             edge_constraint: EdgeConstraint::None,
             direction: sf::Vector2f::new(0., 0.),
+            normal: sf::Vector2f::new(0., 0.),
+            prev_normal: sf::Vector2f::new(0., 0.),
+            offset_vec: sf::Vector2f::new(0., 0.),
         }
     }
 
@@ -69,6 +75,11 @@ impl<'a> Point<'a> {
 
         let v01_perp = my_math::vec_norm(&v01_perp);
         let v12_perp = my_math::vec_norm(&v12_perp);
+
+        self.normal = v01_perp;
+        self.prev_normal = v12_perp;
+        self.offset_vec = my_math::vec_norm(&(v01_perp + v12_perp)) /
+            ((1. + v01_perp.dot(v12_perp)) / 2.).sqrt();
 
         if cross2(&v01, &v12) < 0. {
             self.direction = my_math::vec_norm(&(v01_perp + v12_perp));
@@ -94,6 +105,9 @@ impl<'a> Clone for Point<'a> {
             is_selected: self.is_selected.clone(),
             edge_constraint: self.edge_constraint.clone(),
             direction: self.direction.clone(),
+            normal: self.normal.clone(),
+            prev_normal: self.prev_normal.clone(),
+            offset_vec: self.offset_vec.clone(),
         }
     }
 }
@@ -139,7 +153,7 @@ impl<'a> Polygon<'a> {
         }
         return result / (self.points_count() as f32);
     }
-    pub fn update_nametag(&mut self) {
+    fn update_nametag(&mut self) {
         if self.font.is_some() {
             self.nametag = Some(sf::RcText::new(&self.name, self.font.as_ref().unwrap(), 20));
             let p = self.find_center();
@@ -164,14 +178,14 @@ impl<'a> Polygon<'a> {
         self.update_labels();
     }
 
-    pub fn update_normals(&mut self) {
+    fn update_normals(&mut self) {
         for i in 0..self.points_count() {
             let prev = self.get_point_pos(i as isize - 1);
             let next = self.get_point_pos(i as isize + 1);
             self.points[i].update_normals(prev, next);
         }
     }
-    pub fn update_labels(&mut self) {
+    fn update_labels(&mut self) {
         if self.constraint_texture.is_some() {
             self.edge_constraint_sprites.resize(self.points_count(), sf::RcSprite::with_texture(self.constraint_texture.as_ref().unwrap()));
 
@@ -180,7 +194,6 @@ impl<'a> Polygon<'a> {
                 let pos = (self.get_point_pos(id as isize) + self.get_point_pos(id as isize + 1)) / 2.;
                 self.edge_constraint_sprites[id].set_position(pos);
             }
-            println!("Update constraints labels");
         }
 
         if self.font.is_some() {
@@ -276,6 +289,7 @@ impl<'a> Polygon<'a> {
     pub fn get_point_pos(&self, id: isize) -> sf::Vector2f {
         self.points[self.fix_index(id)].pos
     }
+    pub fn get_offset_vec(&self, id: isize) -> sf::Vector2f { self.points[self.fix_index(id)].offset_vec }
 
     pub fn get_edge_constraint(&self, id: isize) -> EdgeConstraint {
         self.points[self.fix_index(id)].edge_constraint.clone()

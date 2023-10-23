@@ -85,7 +85,6 @@ impl<'a> PolygonBuilder<'a> {
             self.raw_polygon.as_mut().unwrap().set_label_resources(&self.constraint_texture, &self.font);
             self.raw_polygon.as_mut().unwrap().show_last_line(false);
             self.raw_polygon.as_mut().unwrap().set_name(format!("Polygon {}", self.curr_id));
-            self.raw_polygon.as_mut().unwrap().update_labels();
             self.update_line(point, point);
             self.new_point_circle.set_position(point);
 
@@ -261,6 +260,11 @@ pub struct PolygonObject<'a> {
 
     show_hover: bool,
 
+    // Draw Offset 
+    show_offset: bool,
+    offset: f32,
+    offset_polygon: Polygon<'a>,
+
     // Point hover
     is_point_hovered: bool,
     hovered_point_id: usize,
@@ -315,6 +319,9 @@ impl<'a> PolygonObject<'a> {
             hovered_line_id: 0,
             is_line_hovered: false,
             insert_pos: sf::Vector2f::new(0.0, 0.0),
+            show_offset: false,
+            offset: 50.0,
+            offset_polygon: Polygon::new(),
         }
     }
     pub fn raw_polygon(&self) -> &Polygon {
@@ -329,6 +336,7 @@ impl<'a> PolygonObject<'a> {
     }
     pub fn insert_point(&mut self, id: isize, pos: sf::Vector2f) {
         self.raw_polygon.insert_point_with_pos(id, pos);
+        self.update_offset();
         self.can_insert = false;
     }
 
@@ -336,8 +344,10 @@ impl<'a> PolygonObject<'a> {
         if self.raw_polygon.points_count() <= 3 {
             return Err(io::Error::new(io::ErrorKind::InvalidData, "Not enough points"));
         }
+        self.raw_polygon.set_edge_contsraint(id - 1, EdgeConstraint::None);
         self.raw_polygon.remove_point(id);
         self.selection.remove(&(id as usize));
+        self.update_offset();
         Ok(())
     }
 
@@ -571,6 +581,7 @@ impl<'a> PolygonObject<'a> {
         for id in self.selection.iter() {
             self.raw_polygon.update_point_pos(self.raw_polygon.get_point_pos(*id as isize) + vec, *id as isize);
         }
+        self.update_offset();
     }
 
     pub fn draw(&self, target: &mut dyn RenderTarget) {
@@ -593,12 +604,43 @@ impl<'a> PolygonObject<'a> {
         }
 
         self.raw_polygon.draw_labels(target);
+
+        if self.show_offset {
+            self.offset_polygon.draw_edges(target);
+            self.offset_polygon.draw_points(target);
+        }
+    }
+
+    pub fn update_offset(&mut self) {
+        if !self.show_offset {
+            return;
+        }
+
+        self.offset_polygon = self.raw_polygon.clone();
+
+        for i in 0..self.offset_polygon.points_count() as isize {
+            let vec = self.raw_polygon.get_offset_vec(i);
+            let pos = self.raw_polygon.get_point_pos(i);
+            self.offset_polygon.update_point_pos(pos + vec * self.offset, i);
+        }
     }
 
     pub fn draw_egui(&mut self, ui: &mut egui::Ui) {
         egui::CollapsingHeader::new(self.raw_polygon.get_name())
             .default_open(true)
             .show(ui, |ui| {
+                let mut show_offset = self.show_offset;
+                let mut offset = self.offset;
+
+                ui.checkbox(&mut show_offset, "Show Offset");
+                ui.add(egui::Slider::new(&mut offset, 0.0..=100.0).text("Offset"));
+
+                if show_offset != self.show_offset || offset != self.offset {
+                    self.offset = offset;
+                    self.show_offset = show_offset;
+                    self.update_offset();
+                }
+
                 for id in 0..self.raw_polygon.points_count() {
                     let line_prev = self.raw_polygon.fix_index(id as isize - 1) as isize;
                     let line0 = self.raw_polygon.fix_index(id as isize) as isize;
@@ -645,26 +687,20 @@ impl<'a> PolygonObject<'a> {
 
                                 self.raw_polygon.update_point_pos(sf::Vector2f::new(p0.x, avg), line0);
                                 self.raw_polygon.update_point_pos(sf::Vector2f::new(p1.x, avg), line1);
-
-                                if self.raw_polygon.is_self_crossing() {
-                                    self.raw_polygon.update_point_pos(p0, line0);
-                                    self.raw_polygon.update_point_pos(p1, line1);
-                                    self.raw_polygon.set_edge_contsraint(line0, old);
-                                }
                             }
                             EdgeConstraint::Vertical => {
                                 let avg = (p0.x + p1.x) / 2.;
-
                                 self.raw_polygon.update_point_pos(sf::Vector2f::new(avg, p0.y), line0);
                                 self.raw_polygon.update_point_pos(sf::Vector2f::new(avg, p1.y), line1);
-
-                                if self.raw_polygon.is_self_crossing() {
-                                    self.raw_polygon.update_point_pos(p0, line0);
-                                    self.raw_polygon.update_point_pos(p1, line1);
-                                    self.raw_polygon.set_edge_contsraint(line0, old);
-                                }
                             }
                             EdgeConstraint::None => (),
+                        }
+                        if self.raw_polygon.is_self_crossing() {
+                            self.raw_polygon.update_point_pos(p0, line0);
+                            self.raw_polygon.update_point_pos(p1, line1);
+                            self.raw_polygon.set_edge_contsraint(line0, old);
+                        } else {
+                            self.update_offset();
                         }
                     }
                 }
