@@ -335,6 +335,7 @@ impl<'a> PolygonObject<'a> {
         self.insert_pos
     }
     pub fn insert_point(&mut self, id: isize, pos: sf::Vector2f) {
+        self.raw_polygon.set_edge_contsraint(id - 1, EdgeConstraint::None);
         self.raw_polygon.insert_point_with_pos(id, pos);
         self.update_offset();
         self.can_insert = false;
