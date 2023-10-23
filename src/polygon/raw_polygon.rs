@@ -1,12 +1,6 @@
-use std::cell::RefCell;
-use std::cmp::{max, min};
-use std::ops::Deref;
 use std::rc::Rc;
 use sfml::graphics::{Drawable, RcFont, RcText, RcTexture, RenderTarget, Shape, Transformable};
-use sfml::SfBox;
-use sfml::system::{Vector2f, Vector2i};
 use crate::my_math::cross2;
-use crate::style::CONSTRAINT_SPRITE_SIZE;
 use super::sf;
 use super::style;
 use super::my_math;
@@ -145,23 +139,27 @@ impl<'a> Polygon<'a> {
         }
         return result / (self.points_count() as f32);
     }
-    pub fn set_name(&mut self, name: String) {
-        self.name = name;
+    pub fn update_nametag(&mut self) {
         if self.font.is_some() {
             self.nametag = Some(sf::RcText::new(&self.name, self.font.as_ref().unwrap(), 20));
             let p = self.find_center();
             self.nametag.as_mut().unwrap().set_position(p);
+            let center = self.nametag.as_ref().unwrap().global_bounds().size() / 2.;
+            self.nametag.as_mut().unwrap().set_origin(center);
         }
     }
+    pub fn set_name(&mut self, name: String) {
+        self.name = name;
+        self.update_nametag();
+    }
+
     pub fn get_name(&self) -> &String {
         &self.name
     }
     pub fn set_label_resources(&mut self, constraint_texture: &Rc<sf::RcTexture>, font: &Rc<sf::RcFont>) {
         self.constraint_texture = Some(Rc::clone(constraint_texture));
         self.font = Some(Rc::clone(font));
-        self.nametag = Some(sf::RcText::new(&self.name, self.font.as_ref().unwrap(), 20));
-        let p = self.find_center();
-        self.nametag.as_mut().unwrap().set_position(p);
+        self.update_nametag();
         self.update_normals();
         self.update_labels();
     }
@@ -182,18 +180,21 @@ impl<'a> Polygon<'a> {
                 let pos = (self.get_point_pos(id as isize) + self.get_point_pos(id as isize + 1)) / 2.;
                 self.edge_constraint_sprites[id].set_position(pos);
             }
+            println!("Update constraints labels");
         }
 
         if self.font.is_some() {
-            for i in 0..(self.points_count() - self.points_labels.len()) {
-                self.points_labels.push(sf::RcText::new((&format!("{}", self.points_labels.len() + i)), self.font.as_ref().unwrap(), 20));
-                let id = self.points_labels.len() - 1;
-                let center = self.points_labels[id].global_bounds().size() / 2.;
-                self.points_labels[id].set_origin(center);
+            if self.points_labels.len() < self.points_count() {
+                for i in 0..(self.points_count() - self.points_labels.len()) {
+                    self.points_labels.push(sf::RcText::new((&format!("{}", self.points_labels.len() + i)), self.font.as_ref().unwrap(), 20));
+                    let id = self.points_labels.len() - 1;
+                    let center = self.points_labels[id].global_bounds().size() / 2.;
+                    self.points_labels[id].set_origin(center);
+                }
             }
             self.points_labels.resize(self.points_count(), sf::RcText::new("0", self.font.as_ref().unwrap(), 20));
 
-            for id in 0..self.points_labels.len() {
+            for id in 0..self.points_count() {
                 let pos = self.get_point_pos(id as isize);
                 let vec = self.points[id].direction * 26.0;
                 self.points_labels[id].set_position(pos + vec);
@@ -201,10 +202,6 @@ impl<'a> Polygon<'a> {
             let p = self.find_center();
             self.nametag.as_mut().unwrap().set_position(p);
         }
-    }
-
-    pub fn generate_labels(&mut self) {
-        self.edge_constraint_sprites.clone();
     }
 
     pub fn new_with_start_point(point: sf::Vector2f) -> Polygon<'a> {
@@ -425,13 +422,25 @@ impl<'a> Polygon<'a> {
         assert_eq!(self.is_proper(), true);
 
         let mut sum: f32 = 0.;
-        for i in 0..(self.points.len() - 1) {
-            sum += (self.points[i + 1].pos.x - self.points[i].pos.x) * (self.points[i + 1].pos.y + self.points[i].pos.y);
+        for i in 0..self.points_count() as isize {
+            sum += (self.get_point_pos(i + 1).x - self.get_point_pos(i).x)
+                * (self.get_point_pos(i + 1).y + self.get_point_pos(i).y);
         }
 
         if sum <= 0. {
             self.points.reverse();
+            // Remap constraints
+            let constraints_cpy: Vec<EdgeConstraint> =
+                self.points.iter().map(|p| p.edge_constraint.clone()).collect();
+            for i in 0..self.points_count() as isize {
+                self.set_edge_contsraint(i, EdgeConstraint::None);
+                let next = self.fix_index(i + 1);
+                self.set_edge_contsraint(i, constraints_cpy[next].clone());
+            }
+
+
             self.generate_lines_vb();
+            self.update_labels();
             return true;
         }
 

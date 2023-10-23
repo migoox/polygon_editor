@@ -85,7 +85,7 @@ impl<'a> PolygonBuilder<'a> {
             self.raw_polygon.as_mut().unwrap().set_label_resources(&self.constraint_texture, &self.font);
             self.raw_polygon.as_mut().unwrap().show_last_line(false);
             self.raw_polygon.as_mut().unwrap().set_name(format!("Polygon {}", self.curr_id));
-            self.raw_polygon.as_mut().unwrap().generate_labels();
+            self.raw_polygon.as_mut().unwrap().update_labels();
             self.update_line(point, point);
             self.new_point_circle.set_position(point);
 
@@ -600,8 +600,13 @@ impl<'a> PolygonObject<'a> {
             .default_open(true)
             .show(ui, |ui| {
                 for id in 0..self.raw_polygon.points_count() {
+                    let line_prev = self.raw_polygon.fix_index(id as isize - 1) as isize;
                     let line0 = self.raw_polygon.fix_index(id as isize) as isize;
                     let line1 = self.raw_polygon.fix_index(id as isize + 1) as isize;
+
+                    let p0 = self.raw_polygon.get_point_pos(line0);
+                    let p1 = self.raw_polygon.get_point_pos(line1);
+
                     // Pick the drawing method
                     let mut old = self.raw_polygon.get_edge_constraint(line0);
                     let mut new = old.clone();
@@ -614,8 +619,16 @@ impl<'a> PolygonObject<'a> {
                         })
                         .show_ui(ui, |ui| {
                             ui.selectable_value(&mut new, EdgeConstraint::None, "None");
-                            ui.selectable_value(&mut new, EdgeConstraint::Horizontal, "Horizontal");
-                            ui.selectable_value(&mut new, EdgeConstraint::Vertical, "Vertical");
+                            if (p1.x - p0.x).abs() > style::POINT_DETECTION_RADIUS &&
+                                self.raw_polygon.get_edge_constraint(line_prev) != EdgeConstraint::Horizontal &&
+                                self.raw_polygon.get_edge_constraint(line1) != EdgeConstraint::Horizontal {
+                                ui.selectable_value(&mut new, EdgeConstraint::Horizontal, "Horizontal");
+                            }
+                            if (p1.y - p0.y).abs() > style::POINT_DETECTION_RADIUS &&
+                                self.raw_polygon.get_edge_constraint(line_prev) != EdgeConstraint::Vertical &&
+                                self.raw_polygon.get_edge_constraint(line1) != EdgeConstraint::Vertical {
+                                ui.selectable_value(&mut new, EdgeConstraint::Vertical, "Vertical");
+                            }
                         });
 
                     if old != new {
@@ -628,30 +641,26 @@ impl<'a> PolygonObject<'a> {
 
                         match new {
                             EdgeConstraint::Horizontal => {
-                                let old_p0 = self.raw_polygon.get_point_pos(line0);
-                                let old_p1 = self.raw_polygon.get_point_pos(line1);
-                                let avg = (old_p0 + old_p1) / 2.;
-                                let len = my_math::distance(&old_p0, &old_p1) / 2.;
+                                let avg = (p0.y + p1.y) / 2.;
 
-                                self.raw_polygon.update_point_pos(sf::Vector2f::new(avg.x + len, avg.y), line0);
-                                self.raw_polygon.update_point_pos(sf::Vector2f::new(avg.x - len, avg.y), line1);
+                                self.raw_polygon.update_point_pos(sf::Vector2f::new(p0.x, avg), line0);
+                                self.raw_polygon.update_point_pos(sf::Vector2f::new(p1.x, avg), line1);
+
                                 if self.raw_polygon.is_self_crossing() {
-                                    self.raw_polygon.update_point_pos(old_p0, line0);
-                                    self.raw_polygon.update_point_pos(old_p1, line1);
+                                    self.raw_polygon.update_point_pos(p0, line0);
+                                    self.raw_polygon.update_point_pos(p1, line1);
                                     self.raw_polygon.set_edge_contsraint(line0, old);
                                 }
                             }
                             EdgeConstraint::Vertical => {
-                                let old_p0 = self.raw_polygon.get_point_pos(line0);
-                                let old_p1 = self.raw_polygon.get_point_pos(line1);
-                                let avg = (old_p0 + old_p1) / 2.;
-                                let len = my_math::distance(&old_p0, &old_p1) / 2.;
+                                let avg = (p0.x + p1.x) / 2.;
 
-                                self.raw_polygon.update_point_pos(sf::Vector2f::new(avg.x, avg.y + len), line0);
-                                self.raw_polygon.update_point_pos(sf::Vector2f::new(avg.x, avg.y - len), line1);
+                                self.raw_polygon.update_point_pos(sf::Vector2f::new(avg, p0.y), line0);
+                                self.raw_polygon.update_point_pos(sf::Vector2f::new(avg, p1.y), line1);
+
                                 if self.raw_polygon.is_self_crossing() {
-                                    self.raw_polygon.update_point_pos(old_p0, line0);
-                                    self.raw_polygon.update_point_pos(old_p1, line1);
+                                    self.raw_polygon.update_point_pos(p0, line0);
+                                    self.raw_polygon.update_point_pos(p1, line1);
                                     self.raw_polygon.set_edge_contsraint(line0, old);
                                 }
                             }
