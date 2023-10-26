@@ -3,14 +3,18 @@ pub mod raw_polygon;
 use std::cell::RefCell;
 use std::io;
 use std::collections::HashSet;
+use std::collections::HashMap;
 use std::rc::Rc;
 use egui_sfml::egui;
-use sfml::graphics::{Drawable, RcTexture, RenderTarget, Shape, Transformable};
+use rand::Rng;
+use sfml::graphics::{CircleShape, Drawable, RcTexture, RenderTarget, Shape, Transformable};
 use sfml::SfBox;
+use sfml::window::Key::P;
 use super::sf;
 
 use raw_polygon::Polygon;
 use raw_polygon::EdgeConstraint;
+use crate::my_math::cross2;
 use super::style;
 use super::my_math;
 
@@ -35,6 +39,9 @@ pub struct PolygonBuilder<'s> {
 }
 
 impl<'a> PolygonBuilder<'a> {
+    pub fn get_resources(&self) -> (&Rc<sf::RcTexture>, &Rc<sf::RcFont>) {
+        (&self.constraint_texture, &self.font)
+    }
     pub fn new() -> PolygonBuilder<'a> {
         let mut helper_circle = sf::CircleShape::new(style::POINT_DETECTION_RADIUS, 30);
         helper_circle.set_fill_color(style::POINT_DETECTION_COLOR_CORRECT);
@@ -145,6 +152,7 @@ impl<'a> PolygonBuilder<'a> {
                     self.clear_draw_flags();
 
                     // Build the PolygonObject
+                    self.raw_polygon.as_mut().unwrap().assert_ccw();
                     self.raw_polygon.as_mut().unwrap().show_last_line(true);
                     let poly = std::mem::replace(&mut self.raw_polygon, None);
                     return Some(PolygonObject::from(poly.unwrap().to_owned()));
@@ -262,8 +270,10 @@ pub struct PolygonObject<'a> {
 
     // Draw Offset 
     show_offset: bool,
+    naive_offset: bool,
     offset: f32,
-    offset_polygon: Polygon<'a>,
+    offset_polygons: Vec<Polygon<'a>>,
+    gizmos: Vec<sf::CircleShape<'a>>,
 
     // Point hover
     is_point_hovered: bool,
@@ -320,8 +330,10 @@ impl<'a> PolygonObject<'a> {
             is_line_hovered: false,
             insert_pos: sf::Vector2f::new(0.0, 0.0),
             show_offset: false,
+            naive_offset: false,
             offset: 50.0,
-            offset_polygon: Polygon::new(),
+            offset_polygons: Vec::new(),
+            gizmos: Vec::new(),
         }
     }
     pub fn raw_polygon(&self) -> &Polygon {
@@ -516,7 +528,6 @@ impl<'a> PolygonObject<'a> {
         self.raw_polygon.deselect_point(id);
         self.selection.remove(&self.raw_polygon.fix_index(id));
 
-
         let id = self.raw_polygon.fix_index(id) as isize;
 
         let mut i = id;
@@ -607,23 +618,153 @@ impl<'a> PolygonObject<'a> {
         self.raw_polygon.draw_labels(target);
 
         if self.show_offset {
-            self.offset_polygon.draw_edges(target);
-            self.offset_polygon.draw_points(target);
+            for offset_polygon in &self.offset_polygons {
+                offset_polygon.draw_edges(target);
+                offset_polygon.draw_points(target);
+            }
+        }
+
+        for gizmo in &self.gizmos {
+            target.draw(gizmo);
         }
     }
 
     pub fn update_offset(&mut self) {
+        let mut rng = rand::thread_rng();
         if !self.show_offset {
             return;
         }
 
-        self.offset_polygon = self.raw_polygon.clone();
-
-        for i in 0..self.offset_polygon.points_count() as isize {
+        // Create a naive offset
+        let mut naive_offset_polygon = self.raw_polygon.clone();
+        for i in 0..naive_offset_polygon.points_count() as isize {
             let vec = self.raw_polygon.get_offset_vec(i);
             let pos = self.raw_polygon.get_point_pos(i);
-            self.offset_polygon.update_point_pos(pos + vec * self.offset, i);
+            naive_offset_polygon.update_point_pos(pos + vec * self.offset, i);
         }
+
+        self.offset_polygons.clear();
+        let mut not_visited: HashSet<usize> = (0..naive_offset_polygon.points_count()).collect();
+
+        // Find the crossing edges in the naive offset
+        let mut crossings = naive_offset_polygon.get_self_crossing_edges();
+        self.gizmos.resize(crossings.len(), sf::CircleShape::new(10., 20));
+        for (id, crossing) in crossings.iter().enumerate() {
+            let p = crossing.1.1;
+            self.gizmos[id].set_radius(5.);
+            self.gizmos[id].set_origin(sf::Vector2f::new(5., 5.));
+            self.gizmos[id].set_position(p);
+            self.gizmos[id].set_fill_color(sf::Color::rgba(255, 0, 0, 64));
+        }
+
+        if crossings.is_empty() || self.naive_offset {
+            // If there are no crossings, the naive offset is the solution
+            self.offset_polygons.push(naive_offset_polygon);
+            return;
+        }
+
+        let mut new_starts: Vec<usize> = Vec::with_capacity(naive_offset_polygon.points_count());
+
+        // Find min x point in order to find outside offset first
+        let mut start = 0;
+        for index in 0..naive_offset_polygon.points_count() {
+            let pos = naive_offset_polygon.get_point_pos(index as isize);
+            let pos_old = naive_offset_polygon.get_point_pos(start as isize);
+
+            if pos.x < pos_old.x {
+                start = index;
+            }
+        }
+
+        new_starts.push(start);
+        while !new_starts.is_empty() {
+            // Create a new polygon
+            self.offset_polygons.push(Polygon::new());
+
+            let start = new_starts.last().unwrap().clone();
+            let mut i = start;
+            new_starts.pop();
+
+            // Iterate
+            loop {
+                // Safety break (prevents infinite loops)
+                if !not_visited.contains(&i) {
+                    break;
+                }
+
+                let curr_point = naive_offset_polygon.get_point_pos(i as isize);
+
+                // Push the current point into the offset polygon
+                self.offset_polygons.last_mut().unwrap()
+                    .push_point_with_pos(curr_point);
+
+                // Mark the point as visited
+                not_visited.remove(&i);
+
+                // Find crossings of the line starting with the point
+                let crossing = crossings.get(&i);
+                if crossing.is_some() {
+                    let (crossing_with, crossing_at) = crossing.unwrap();
+                    let crossing_at = crossing_at.clone();
+
+                    let last0_id = naive_offset_polygon.fix_index(*crossing_with as isize);
+                    let last1_id = naive_offset_polygon.fix_index(*crossing_with as isize + 1);
+
+                    let last0 = naive_offset_polygon.get_point_pos(last0_id as isize);
+                    let last1 = naive_offset_polygon.get_point_pos(last1_id as isize);
+
+                    // Check cross products
+                    let u = crossing_at - curr_point;
+                    let v0 = last0 - crossing_at;
+                    let v1 = last1 - crossing_at;
+
+                    let mut poisson_id = 0;
+                    let old_next = naive_offset_polygon.fix_index(i as isize + 1);
+
+                    self.offset_polygons.last_mut().unwrap().push_point_with_pos(crossing_at);
+                    if cross2(&u, &v0) > cross2(&u, &v1) {
+                        self.offset_polygons.last_mut().unwrap().push_point_with_pos(last0);
+                        i = last0_id;
+                        poisson_id = last1_id;
+                    } else {
+                        self.offset_polygons.last_mut().unwrap().push_point_with_pos(last1);
+                        i = last1_id;
+                        poisson_id = last0_id;
+                    }
+
+                    // Exclude incorrect points from the further search
+                    loop {
+                        // // Safety break;
+                        // if !not_visited.contains(&poisson_id) {
+                        //     break;
+                        // }
+                        not_visited.remove(&poisson_id);
+
+                        // The actual break;
+                        let crossing = crossings.get(&poisson_id);
+                        if crossing.is_some() {
+                            break;
+                        }
+
+                        poisson_id = naive_offset_polygon.fix_index(poisson_id as isize + 1);
+                    }
+
+                    // Add old_next to the new_starts if it's not visited
+                    if not_visited.contains(&old_next) {
+                        new_starts.push(old_next);
+                    }
+                } else {
+                    i = naive_offset_polygon.fix_index(i as isize + 1);
+                }
+
+                // The actual break
+                if start == i {
+                    break;
+                }
+            }
+        }
+
+        self.offset_polygons.retain(|poly| poly.is_proper());
     }
 
     pub fn draw_egui(&mut self, ui: &mut egui::Ui) {
@@ -632,12 +773,15 @@ impl<'a> PolygonObject<'a> {
             .show(ui, |ui| {
                 let mut show_offset = self.show_offset;
                 let mut offset = self.offset;
+                let mut naive = self.naive_offset;
 
                 ui.checkbox(&mut show_offset, "Show Offset");
-                ui.add(egui::Slider::new(&mut offset, 0.0..=100.0).text("Offset"));
+                ui.checkbox(&mut naive, "Naive Offset");
+                ui.add(egui::Slider::new(&mut offset, 0.0..=style::MAX_OFFSET).text("Offset"));
 
-                if show_offset != self.show_offset || offset != self.offset {
+                if show_offset != self.show_offset || offset != self.offset || naive != self.naive_offset {
                     self.offset = offset;
+                    self.naive_offset = naive;
                     self.show_offset = show_offset;
                     self.update_offset();
                 }

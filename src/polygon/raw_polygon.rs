@@ -1,6 +1,8 @@
+use std::collections::HashMap;
 use std::rc::Rc;
+use geo::LineIntersection;
 use sfml::graphics::{Drawable, RcFont, RcText, RcTexture, RenderTarget, Shape, Transformable};
-use crate::my_math::{cross2, vec_norm};
+use crate::my_math::{cross2, distance, vec_norm};
 use super::sf;
 use super::style;
 use super::my_math;
@@ -234,6 +236,8 @@ impl<'a> Polygon<'a> {
         // Return the Polygon instance
         let mut result = Polygon::new();
         result.points = points;
+        result.update_labels();
+        result.update_normals();
         result.generate_lines_vb();
 
         result
@@ -400,6 +404,71 @@ impl<'a> Polygon<'a> {
         self.points[self.fix_index(id)].is_selected
     }
 
+    pub fn get_self_crossing_edges(&self) -> HashMap<usize, (usize, sf::Vector2f)> {
+        let mut hash_map: HashMap<usize, Vec<(usize, sf::Vector2f)>> = HashMap::new();
+
+        for i in 0..self.points_count() as isize {
+            let line1 = geo::geometry::Line::new(
+                geo::coord! {x: self.get_point_pos(i).x, y: self.get_point_pos(i).y},
+                geo::coord! {x: self.get_point_pos(i + 1).x, y: self.get_point_pos(i + 1).y},
+            );
+
+            let mut end = self.points_count() as isize;
+            if i == 0 {
+                end -= 1;
+            }
+            // Do not check neighbor lines
+            for j in (i + 2)..end {
+                let line2 = geo::geometry::Line::new(
+                    geo::coord! {x: self.get_point_pos(j).x, y: self.get_point_pos(j).y},
+                    geo::coord! {x: self.get_point_pos(j + 1).x, y: self.get_point_pos(j + 1).y},
+                );
+
+                let result = geo::algorithm::line_intersection::line_intersection(
+                    line1,
+                    line2,
+                );
+
+                if result.is_some() {
+                    match result.as_ref().unwrap() {
+                        LineIntersection::SinglePoint { intersection, is_proper } => {
+                            if *is_proper {
+                                let id0 = self.fix_index(i);
+                                let id1 = self.fix_index(j);
+                                let point = sf::Vector2f::new(intersection.x, intersection.y);
+
+                                let val = hash_map.entry(id0).or_insert(Vec::new());
+                                val.push((id1, point));
+
+                                let val = hash_map.entry(id1).or_insert(Vec::new());
+                                val.push((id0, point));
+                            }
+                        }
+                        LineIntersection::Collinear { intersection: _intersection } => ()
+                    }
+                }
+            }
+        }
+
+        let mut result: HashMap<usize, (usize, sf::Vector2f)> = HashMap::new();
+        for (id, vec) in hash_map {
+            let start_point = self.get_point_pos(id as isize);
+
+            let mut min_dist = my_math::distance2(&start_point, &vec[0].1);
+            let mut min_i = 0;
+            for i in 1..vec.len() {
+                let curr_dist = my_math::distance2(&start_point, &vec[i].1);
+                if curr_dist < min_dist {
+                    min_dist = curr_dist;
+                    min_i = i;
+                }
+            }
+
+            result.insert(id, (vec[min_i].0, vec[min_i].1));
+        }
+
+        result
+    }
     pub fn is_self_crossing(&self) -> bool {
         for i in 0..self.points_count() as isize {
             let line1 = geo::geometry::Line::new(
@@ -453,6 +522,7 @@ impl<'a> Polygon<'a> {
 
 
             self.generate_lines_vb();
+            self.update_normals();
             self.update_labels();
             return true;
         }

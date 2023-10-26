@@ -10,6 +10,8 @@ use egui_sfml::{
 };
 
 use sfml::graphics::RenderTarget;
+use crate::polygon::PolygonObject;
+use crate::polygon::raw_polygon::Polygon;
 use crate::state_machine::{IdleState, State};
 
 use super::sf;
@@ -60,7 +62,7 @@ impl Application<'_> {
 
         let program_scale = 1.0;
 
-        Application {
+        let mut result = Application {
             window,
             program_scale,
             cpu_drawing_image: sf::Image::new(style::WIN_SIZE_X, style::WIN_SIZE_Y),
@@ -74,7 +76,40 @@ impl Application<'_> {
             a_pressed: false,
             ctrl_pressed: false,
             left_mouse_pressed: false,
-        }
+        };
+
+
+        // let mut points: Vec<sf::Vector2f> = Vec::with_capacity(10);
+        // points.push(sf::Vector2f::new(422., 131.));
+        // points.push(sf::Vector2f::new(408., 640.));
+        // points.push(sf::Vector2f::new(1008., 645.));
+        // points.push(sf::Vector2f::new(979., 120.));
+        // points.push(sf::Vector2f::new(740., 119.));
+        // points.push(sf::Vector2f::new(741., 490.));
+        // points.push(sf::Vector2f::new(509., 489.));
+        // points.push(sf::Vector2f::new(510., 248.));
+        // points.push(sf::Vector2f::new(678., 192.));
+        // points.push(sf::Vector2f::new(563., 139.));
+        //
+        // result.app_ctx.polygons.push(PolygonObject::from(Polygon::create(points)));
+
+
+        let mut points: Vec<sf::Vector2f> = Vec::with_capacity(10);
+        points.push(sf::Vector2f::new(722., 255.));
+        points.push(sf::Vector2f::new(801., 256.));
+        points.push(sf::Vector2f::new(797., 114.));
+        points.push(sf::Vector2f::new(438., 118.));
+        points.push(sf::Vector2f::new(446., 463.));
+        points.push(sf::Vector2f::new(893., 451.));
+        points.push(sf::Vector2f::new(887., 307.));
+        points.push(sf::Vector2f::new(661., 305.));
+        points.push(sf::Vector2f::new(652., 373.));
+        points.push(sf::Vector2f::new(503., 363.));
+        points.push(sf::Vector2f::new(516., 167.));
+        points.push(sf::Vector2f::new(726., 163.));
+
+        result.app_ctx.polygons.push(PolygonObject::from(Polygon::create(points)));
+        result
     }
 
     pub fn run(&mut self) {

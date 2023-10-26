@@ -7,6 +7,12 @@ pub fn distance(point1: &sf::Vector2f, point2: &sf::Vector2f) -> f32 {
     (dx * dx + dy * dy).sqrt()
 }
 
+pub fn distance2(point1: &sf::Vector2f, point2: &sf::Vector2f) -> f32 {
+    let dx = point1.x - point2.x;
+    let dy = point1.y - point2.y;
+    (dx * dx + dy * dy)
+}
+
 pub fn vec_len(vec: &sf::Vector2f) -> f32 {
     (vec.x * vec.x + vec.y * vec.y).sqrt()
 }
