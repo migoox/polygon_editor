@@ -13,6 +13,12 @@ pub fn distance2(point1: &sf::Vector2f, point2: &sf::Vector2f) -> f32 {
     (dx * dx + dy * dy)
 }
 
+pub fn is_right_turn(p0: &sf::Vector2f, p1: &sf::Vector2f, p2: &sf::Vector2f) -> bool {
+    let v0 = sf::Vector2f::new(p1.x - p0.x, p1.y - p0.y);
+    let v1 = sf::Vector2f::new(p2.x - p1.x, p2.y - p1.y);
+    cross2(&v0, &v1) < 0.
+}
+
 pub fn vec_len(vec: &sf::Vector2f) -> f32 {
     (vec.x * vec.x + vec.y * vec.y).sqrt()
 }

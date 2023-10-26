@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::ptr::hash;
 use std::rc::Rc;
 use geo::LineIntersection;
 use sfml::graphics::{Drawable, RcFont, RcText, RcTexture, RenderTarget, Shape, Transformable};
@@ -252,7 +253,7 @@ impl<'a> Polygon<'a> {
             .iter()
             .map(|p| sf::Vertex::new(
                 p.pos.clone(),
-                style::LINES_COLOR,
+                self.edges_color,
                 sf::Vector2f::new(0., 0.),
             ))
             .collect();
@@ -374,14 +375,7 @@ impl<'a> Polygon<'a> {
         }
 
         self.edges_color = edges_color;
-
-        for i in 0..self.points.len() {
-            self.lines_vb.update(&[sf::Vertex::new(self.points[i].pos, self.edges_color, sf::Vector2f::new(0.0, 0.0))], i as u32);
-        }
-
-        if self.show_last_line {
-            self.lines_vb.update(&[sf::Vertex::new(self.points[0].pos, self.edges_color, sf::Vector2f::new(0.0, 0.0))], self.points_count() as u32);
-        }
+        self.generate_lines_vb();
     }
 
     pub fn is_proper(&self) -> bool {
@@ -404,7 +398,7 @@ impl<'a> Polygon<'a> {
         self.points[self.fix_index(id)].is_selected
     }
 
-    pub fn get_self_crossing_edges(&self) -> HashMap<usize, (usize, sf::Vector2f)> {
+    pub fn get_self_crossing_edges(&self) -> HashMap<usize, Vec<(usize, sf::Vector2f)>> {
         let mut hash_map: HashMap<usize, Vec<(usize, sf::Vector2f)>> = HashMap::new();
 
         for i in 0..self.points_count() as isize {
@@ -449,25 +443,7 @@ impl<'a> Polygon<'a> {
                 }
             }
         }
-
-        let mut result: HashMap<usize, (usize, sf::Vector2f)> = HashMap::new();
-        for (id, vec) in hash_map {
-            let start_point = self.get_point_pos(id as isize);
-
-            let mut min_dist = my_math::distance2(&start_point, &vec[0].1);
-            let mut min_i = 0;
-            for i in 1..vec.len() {
-                let curr_dist = my_math::distance2(&start_point, &vec[i].1);
-                if curr_dist < min_dist {
-                    min_dist = curr_dist;
-                    min_i = i;
-                }
-            }
-
-            result.insert(id, (vec[min_i].0, vec[min_i].1));
-        }
-
-        result
+        hash_map
     }
     pub fn is_self_crossing(&self) -> bool {
         for i in 0..self.points_count() as isize {

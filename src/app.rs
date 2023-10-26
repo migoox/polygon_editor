@@ -93,21 +93,40 @@ impl Application<'_> {
         //
         // result.app_ctx.polygons.push(PolygonObject::from(Polygon::create(points)));
 
+        //
+        // let mut points: Vec<sf::Vector2f> = Vec::with_capacity(10);
+        // points.push(sf::Vector2f::new(722., 255.));
+        // points.push(sf::Vector2f::new(801., 256.));
+        // points.push(sf::Vector2f::new(797., 114.));
+        // points.push(sf::Vector2f::new(438., 118.));
+        // points.push(sf::Vector2f::new(446., 463.));
+        // points.push(sf::Vector2f::new(893., 451.));
+        // points.push(sf::Vector2f::new(887., 307.));
+        // points.push(sf::Vector2f::new(661., 305.));
+        // points.push(sf::Vector2f::new(652., 373.));
+        // points.push(sf::Vector2f::new(503., 363.));
+        // points.push(sf::Vector2f::new(516., 167.));
+        // points.push(sf::Vector2f::new(726., 163.));
+        //
+        // result.app_ctx.polygons.push(PolygonObject::from(Polygon::create(points)));
 
         let mut points: Vec<sf::Vector2f> = Vec::with_capacity(10);
-        points.push(sf::Vector2f::new(722., 255.));
-        points.push(sf::Vector2f::new(801., 256.));
-        points.push(sf::Vector2f::new(797., 114.));
-        points.push(sf::Vector2f::new(438., 118.));
-        points.push(sf::Vector2f::new(446., 463.));
-        points.push(sf::Vector2f::new(893., 451.));
-        points.push(sf::Vector2f::new(887., 307.));
-        points.push(sf::Vector2f::new(661., 305.));
-        points.push(sf::Vector2f::new(652., 373.));
-        points.push(sf::Vector2f::new(503., 363.));
-        points.push(sf::Vector2f::new(516., 167.));
-        points.push(sf::Vector2f::new(726., 163.));
-
+        points.push(sf::Vector2f::new(347., 228.));
+        points.push(sf::Vector2f::new(825., 216.));
+        points.push(sf::Vector2f::new(816., 552.));
+        points.push(sf::Vector2f::new(974., 560.));
+        points.push(sf::Vector2f::new(962., 108.));
+        points.push(sf::Vector2f::new(204., 108.));
+        points.push(sf::Vector2f::new(187., 624.));
+        points.push(sf::Vector2f::new(597., 628.));
+        points.push(sf::Vector2f::new(595., 452.));
+        points.push(sf::Vector2f::new(505., 453.));
+        points.push(sf::Vector2f::new(508., 571.));
+        points.push(sf::Vector2f::new(349., 575.));
+        points.push(sf::Vector2f::new(351., 430.));
+        points.push(sf::Vector2f::new(746., 433.));
+        points.push(sf::Vector2f::new(749., 351.));
+        points.push(sf::Vector2f::new(348., 351.));
         result.app_ctx.polygons.push(PolygonObject::from(Polygon::create(points)));
         result
     }
