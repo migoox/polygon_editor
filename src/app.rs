@@ -1,7 +1,3 @@
-use std::any::Any;
-use std::cell::RefCell;
-use std::ops::Deref;
-use std::rc::Rc;
 use std::time::Instant;
 
 use egui_sfml::{
@@ -10,8 +6,6 @@ use egui_sfml::{
 };
 
 use sfml::graphics::RenderTarget;
-use crate::polygon::PolygonObject;
-use crate::polygon::raw_polygon::Polygon;
 use crate::state_machine::{IdleState, State};
 
 use super::sf;
@@ -109,25 +103,25 @@ impl Application<'_> {
         // points.push(sf::Vector2f::new(726., 163.));
         //
         // result.app_ctx.polygons.push(PolygonObject::from(Polygon::create(points)));
-
-        let mut points: Vec<sf::Vector2f> = Vec::with_capacity(10);
-        points.push(sf::Vector2f::new(347., 228.));
-        points.push(sf::Vector2f::new(825., 216.));
-        points.push(sf::Vector2f::new(816., 552.));
-        points.push(sf::Vector2f::new(974., 560.));
-        points.push(sf::Vector2f::new(962., 108.));
-        points.push(sf::Vector2f::new(204., 108.));
-        points.push(sf::Vector2f::new(187., 624.));
-        points.push(sf::Vector2f::new(597., 628.));
-        points.push(sf::Vector2f::new(595., 452.));
-        points.push(sf::Vector2f::new(505., 453.));
-        points.push(sf::Vector2f::new(508., 571.));
-        points.push(sf::Vector2f::new(349., 575.));
-        points.push(sf::Vector2f::new(351., 430.));
-        points.push(sf::Vector2f::new(746., 433.));
-        points.push(sf::Vector2f::new(749., 351.));
-        points.push(sf::Vector2f::new(348., 351.));
-        result.app_ctx.polygons.push(PolygonObject::from(Polygon::create(points)));
+        //
+        // let mut points: Vec<sf::Vector2f> = Vec::with_capacity(10);
+        // points.push(sf::Vector2f::new(347., 228.));
+        // points.push(sf::Vector2f::new(825., 216.));
+        // points.push(sf::Vector2f::new(816., 552.));
+        // points.push(sf::Vector2f::new(974., 560.));
+        // points.push(sf::Vector2f::new(962., 108.));
+        // points.push(sf::Vector2f::new(204., 108.));
+        // points.push(sf::Vector2f::new(187., 624.));
+        // points.push(sf::Vector2f::new(597., 628.));
+        // points.push(sf::Vector2f::new(595., 452.));
+        // points.push(sf::Vector2f::new(505., 453.));
+        // points.push(sf::Vector2f::new(508., 571.));
+        // points.push(sf::Vector2f::new(349., 575.));
+        // points.push(sf::Vector2f::new(351., 430.));
+        // points.push(sf::Vector2f::new(746., 433.));
+        // points.push(sf::Vector2f::new(749., 351.));
+        // points.push(sf::Vector2f::new(348., 351.));
+        // result.app_ctx.polygons.push(PolygonObject::from(Polygon::create(points)));
         result
     }
 
@@ -279,15 +273,15 @@ impl Application<'_> {
         match self.drawing_mode {
             DrawingMode::GPULines => {
                 for poly in &self.app_ctx.polygons {
-                    poly.raw_polygon().draw_edges(&mut self.window);
+                    poly.draw_edges(&mut self.window);
+                    poly.draw_ctx(&mut self.window);
                 }
 
-                match self.app_ctx.polygon_builder.raw_polygon() {
-                    Some(&ref poly) => poly.draw_edges(&mut self.window),
-                    None => (),
-                }
+                self.app_ctx.polygon_builder.draw_edges(&mut self.window);
+                self.app_ctx.polygon_builder.draw_ctx(&mut self.window);
             }
             DrawingMode::CPUBresenhamLines => {
+                // Clear the framebuffer
                 for y in 0..style::WIN_SIZE_Y {
                     for x in 0..style::WIN_SIZE_X {
                         unsafe { self.cpu_drawing_image.set_pixel(x, y, style::BACKGROUND_COLOR); }
@@ -295,14 +289,11 @@ impl Application<'_> {
                 }
 
                 for poly in &self.app_ctx.polygons {
-                    poly.raw_polygon().draw_edges_bresenham(&mut self.cpu_drawing_image);
+                    poly.draw_bresenham_edges(&mut self.window, &mut self.cpu_drawing_image);
                 }
+                self.app_ctx.polygon_builder.draw_bresenham_edges(&mut self.window, &mut self.cpu_drawing_image);
 
-                match self.app_ctx.polygon_builder.raw_polygon() {
-                    Some(&ref poly) => poly.draw_edges_bresenham(&mut self.cpu_drawing_image),
-                    None => (),
-                }
-
+                // Draw the framebuffer
                 let mut texture = sf::Texture::new();
                 let _err = texture.as_mut().unwrap().load_from_image(
                     &self.cpu_drawing_image,
@@ -316,24 +307,13 @@ impl Application<'_> {
 
                 let sprite = sf::Sprite::with_texture(texture.as_ref().unwrap());
                 self.window.draw(&sprite);
+
+                for poly in &self.app_ctx.polygons {
+                    poly.draw_ctx(&mut self.window);
+                }
+                self.app_ctx.polygon_builder.draw_ctx(&mut self.window);
             }
         };
-
-        // Draw points of the polygons
-        for poly in &self.app_ctx.polygons {
-            poly.raw_polygon().draw_points(&mut self.window);
-        }
-
-        match self.app_ctx.polygon_builder.raw_polygon() {
-            Some(&ref poly) => poly.draw_points(&mut self.window),
-            None => (),
-        }
-
-        // Draw ui elements
-        self.app_ctx.polygon_builder.draw(&mut self.window);
-        for poly in &self.app_ctx.polygons {
-            poly.draw(&mut self.window);
-        }
     }
 
     fn render_egui(&mut self, ctx: &egui::Context) {
@@ -348,9 +328,21 @@ impl Application<'_> {
                 egui::ScrollArea::vertical()
                     .max_height(400.0)
                     .show(ui, |ui| {
-                        for poly in self.app_ctx.polygons.iter_mut() {
-                            poly.draw_egui(ui);
-                        }
+                        self.app_ctx.polygons.retain_mut(|poly| {
+                            let mut remove_flag = true;
+                            egui::CollapsingHeader::new(poly.raw_polygon().get_name())
+                                .default_open(true)
+                                .show(ui, |ui| {
+                                    // Delete button
+                                    if ui.button("Delete").clicked() {
+                                        remove_flag = false;
+                                    }
+
+                                    // Polygon options
+                                    poly.draw_egui(ui);
+                                });
+                            remove_flag
+                        });
                     });
 
 

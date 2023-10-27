@@ -1,7 +1,7 @@
 use std::io;
 use std::ops::Add;
 use sfml::system::Vector2f;
-use super::sf;
+use super::{sf, style};
 use super::app::AppContext;
 
 pub trait State {
@@ -21,7 +21,8 @@ pub struct IdleState;
 impl IdleState {
     pub fn new(app_ctx: &mut AppContext) -> IdleState {
         for poly in app_ctx.polygons.iter_mut() {
-            poly.enable_hover_show()
+            poly.enable_hover_show();
+            poly.set_point_hover_color(style::POINTS_COLOR);
         }
 
         IdleState
@@ -33,7 +34,8 @@ pub struct AddPolygonState;
 impl AddPolygonState {
     pub fn new(app_ctx: &mut AppContext) -> AddPolygonState {
         for poly in app_ctx.polygons.iter_mut() {
-            poly.disable_hover_show()
+            poly.disable_hover_show();
+            poly.set_point_hover_color(style::POINTS_COLOR);
         }
         app_ctx.polygon_builder.start();
 
@@ -46,7 +48,8 @@ pub struct SelectionState;
 impl SelectionState {
     pub fn new(app_ctx: &mut AppContext) -> SelectionState {
         for poly in app_ctx.polygons.iter_mut() {
-            poly.enable_hover_show()
+            poly.enable_hover_show();
+            poly.set_point_hover_color(style::POINTS_COLOR);
         }
 
         SelectionState
@@ -61,7 +64,8 @@ pub struct DraggingState {
 impl DraggingState {
     pub fn new(mouse_pos: sf::Vector2f, app_ctx: &mut AppContext) -> DraggingState {
         for poly in app_ctx.polygons.iter_mut() {
-            poly.disable_hover_show()
+            poly.disable_hover_show();
+            poly.set_point_hover_color(style::POINTS_COLOR);
         }
 
         DraggingState {
@@ -77,7 +81,8 @@ pub struct EditPointsState;
 impl EditPointsState {
     pub fn new(app_ctx: &mut AppContext) -> EditPointsState {
         for poly in app_ctx.polygons.iter_mut() {
-            poly.enable_hover_show()
+            poly.enable_hover_show();
+            poly.set_point_hover_color(style::POINT_DETECTION_COLOR_INCORRECT);
         }
 
         EditPointsState

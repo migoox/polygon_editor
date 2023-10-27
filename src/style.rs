@@ -26,6 +26,6 @@ pub const CONSTRAINT_SPRITE_SIZE: sf::Vector2f = sf::Vector2f::new(32., 32.);
 pub const WIN_SIZE_X: u32 = 1280;
 pub const WIN_SIZE_Y: u32 = 720;
 
-pub const MAX_OFFSET: f32 = 100.;
+pub const MAX_OFFSET: f32 = 50.;
 
 pub const OFFSET_COLOR: sf::Color = sf::Color::rgb(167, 187, 236);
