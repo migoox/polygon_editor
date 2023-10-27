@@ -38,3 +38,15 @@ pub fn dot_prod(vec1: &sf::Vector2f, vec2: &sf::Vector2f) -> f32 {
 pub fn cross2(vec1: &sf::Vector2f, vec2: &sf::Vector2f) -> f32 {
     return (vec1.x * vec2.y) - (vec1.y * vec2.x);
 }
+
+pub fn is_ccw(points: &[sf::Vector2f]) -> bool {
+    let mut sum: f32 = 0.;
+    for i in 0..(points.len() - 1) {
+        sum += (points[i + 1].x - points[i].x)
+            * (points[i + 1].y + points[i].y);
+    }
+    sum += (points[0].x - points[points.len() - 1].x)
+        * (points[0].y + points[points.len() - 1].y);
+
+    sum > 0.
+}

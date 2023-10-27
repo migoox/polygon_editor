@@ -317,10 +317,8 @@ impl Application<'_> {
     }
 
     fn render_egui(&mut self, ctx: &egui::Context) {
-        let w_size = egui::Vec2::new(self.window.size().x as f32, self.window.size().y as f32);
-
-
         egui::Window::new("Options")
+            .default_width(300.)
             .show(ctx, |ui| {
                 self.egui_rect = ctx.used_rect();
 

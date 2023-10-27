@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::ptr::hash;
 use std::rc::Rc;
 use geo::LineIntersection;
 use sfml::graphics::{Drawable, RcFont, RcText, RcTexture, RenderTarget, Shape, Transformable};

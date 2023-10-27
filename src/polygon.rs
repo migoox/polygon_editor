@@ -1,7 +1,7 @@
 pub mod raw_polygon;
 
 use std::io;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 use egui_sfml::egui;
 use rand::Rng;
@@ -10,7 +10,7 @@ use super::sf;
 
 use raw_polygon::Polygon;
 use raw_polygon::EdgeConstraint;
-use crate::my_math::{cross2, is_right_turn};
+use crate::my_math::{cross2, is_ccw, is_right_turn};
 use crate::polygon::raw_polygon::EdgeConstraint::Horizontal;
 use super::style;
 use super::my_math;
@@ -503,75 +503,11 @@ impl<'a> PolygonObject<'a> {
     pub fn select_point(&mut self, id: isize) {
         self.raw_polygon.select_point(id);
         self.selection.insert(self.raw_polygon.fix_index(id));
-        //
-        // let id = self.raw_polygon.fix_index(id) as isize;
-        //
-        // let mut i = id;
-        // while self.raw_polygon.get_edge_constraint(i) != EdgeConstraint::None {
-        //     self.raw_polygon.select_point(i);
-        //     self.selection.insert(self.raw_polygon.fix_index(i));
-        //
-        //     self.raw_polygon.select_point(i + 1);
-        //     self.selection.insert(self.raw_polygon.fix_index(i + 1));
-        //
-        //     i = self.raw_polygon.fix_index(i + 1) as isize;
-        //
-        //     if id == i {
-        //         break;
-        //     }
-        // }
-        //
-        // let mut i = id - 1;
-        // while self.raw_polygon.get_edge_constraint(i) != EdgeConstraint::None {
-        //     self.raw_polygon.select_point(i);
-        //     self.selection.insert(self.raw_polygon.fix_index(i));
-        //
-        //     self.raw_polygon.select_point(i + 1);
-        //     self.selection.insert(self.raw_polygon.fix_index(i + 1));
-        //
-        //     i = self.raw_polygon.fix_index(i - 1) as isize;
-        //
-        //     if id == i {
-        //         break;
-        //     }
-        // }
     }
 
     pub fn deselect_point(&mut self, id: isize) {
         self.raw_polygon.deselect_point(id);
         self.selection.remove(&self.raw_polygon.fix_index(id));
-        //
-        // let id = self.raw_polygon.fix_index(id) as isize;
-        //
-        // let mut i = id;
-        // while self.raw_polygon.get_edge_constraint(i) != EdgeConstraint::None {
-        //     self.raw_polygon.deselect_point(i);
-        //     self.selection.remove(&self.raw_polygon.fix_index(i));
-        //
-        //     self.raw_polygon.deselect_point(i + 1);
-        //     self.selection.remove(&self.raw_polygon.fix_index(i + 1));
-        //
-        //     i = self.raw_polygon.fix_index(i + 1) as isize;
-        //
-        //     if id == i {
-        //         break;
-        //     }
-        // }
-        //
-        // let mut i = id - 1;
-        // while self.raw_polygon.get_edge_constraint(i) != EdgeConstraint::None {
-        //     self.raw_polygon.deselect_point(i);
-        //     self.selection.remove(&self.raw_polygon.fix_index(i));
-        //
-        //     self.raw_polygon.deselect_point(i + 1);
-        //     self.selection.remove(&self.raw_polygon.fix_index(i + 1));
-        //
-        //     i = self.raw_polygon.fix_index(i - 1) as isize;
-        //
-        //     if id == i {
-        //         break;
-        //     }
-        // }
     }
 
     pub fn deselect_all_points(&mut self) {
@@ -702,11 +638,19 @@ impl<'a> PolygonObject<'a> {
             return;
         }
 
+        let mut visited: Vec<bool> = Vec::new();
+        visited.resize(self.raw_polygon.points_count(), false);
+
         let mut outside_offset_polygon_points: Vec<sf::Vector2f> = Vec::new();
+        let mut outside_offset_polygon_points_ids: Vec<usize> = Vec::new();
 
         // Find min x point in order to find outside offset
         let mut start = 0;
         for index in 0..naive_offset_polygon.points_count() {
+            if visited[index] {
+                continue;
+            }
+
             let pos = naive_offset_polygon.get_point_pos(index as isize);
             let pos_old = naive_offset_polygon.get_point_pos(start as isize);
 
@@ -717,17 +661,18 @@ impl<'a> PolygonObject<'a> {
 
         // Make "start" an immutable and begin the outside offset algorithm
         let start = start;
-        let mut i = naive_offset_polygon.fix_index(start as isize + 1);
+        let mut i = start;
 
         // Safety break (prevents infinite loops in case the algorithm doesn't work)
-        let mut iterations = 0;
+        let mut iterations_inner = 0;
 
-        while i != start {
+        loop {
             // Create a new polygon
             let curr_point = naive_offset_polygon.get_point_pos(i as isize);
 
             // Push the current point into the offset polygon
             outside_offset_polygon_points.push(curr_point);
+            outside_offset_polygon_points_ids.push(i);
 
             // Find crossings of the line starting with the point "i"
             let mut curr_line_crossings = crossings.get(&i);
@@ -797,8 +742,12 @@ impl<'a> PolygonObject<'a> {
             }
 
             // Safety break
-            iterations += 1;
-            if iterations > naive_offset_polygon.points_count() {
+            iterations_inner += 1;
+            if iterations_inner > naive_offset_polygon.points_count() {
+                break;
+            }
+
+            if i == start {
                 break;
             }
         }
