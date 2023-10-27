@@ -54,7 +54,7 @@ impl Application<'_> {
 
         window.set_vertical_sync_enabled(true);
 
-        let program_scale = 1.0;
+        let program_scale = 0.8;
 
         let mut result = Application {
             window,
@@ -319,11 +319,11 @@ impl Application<'_> {
     fn render_egui(&mut self, ctx: &egui::Context) {
         let w_size = egui::Vec2::new(self.window.size().x as f32, self.window.size().y as f32);
 
+
         egui::Window::new("Options")
             .show(ctx, |ui| {
                 self.egui_rect = ctx.used_rect();
 
-                ui.separator();
                 ui.label("Polygons:");
                 egui::ScrollArea::vertical()
                     .max_height(400.0)
@@ -358,6 +358,26 @@ impl Application<'_> {
                         ui.selectable_value(&mut self.drawing_mode, DrawingMode::CPUBresenhamLines, "Bresenham Lines [CPU]");
                     });
 
+                ui.separator();
+                let mut polygon_flag = false;
+                let mut polygon_with_selected_points = 0;
+                for (id, poly) in self.app_ctx.polygons.iter().enumerate() {
+                    if poly.selected_points_count() > 0 {
+                        polygon_with_selected_points = id;
+                        if polygon_flag {
+                            polygon_flag = false;
+                            break;
+                        }
+                        polygon_flag = true;
+                    }
+                }
+
+                ui.label("Selected edge:");
+                if polygon_flag {
+                    self.app_ctx.polygons[polygon_with_selected_points].draw_selection_egui(ui);
+                } else {
+                    ui.label("None");
+                }
                 ui.separator();
 
                 if ui.button("Add a polygon").clicked() {
