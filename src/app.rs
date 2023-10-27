@@ -24,6 +24,8 @@ pub struct AppContext<'a> {
     pub polygons: Vec<polygon::PolygonObject<'a>>,
 }
 
+pub struct Resources {}
+
 pub struct Application<'a> {
     window: sf::RenderWindow,
     cpu_drawing_image: sf::Image,

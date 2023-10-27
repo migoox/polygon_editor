@@ -11,7 +11,6 @@ use super::sf;
 use raw_polygon::Polygon;
 use raw_polygon::EdgeConstraint;
 use crate::my_math::{cross2, is_ccw, is_right_turn};
-use crate::polygon::raw_polygon::EdgeConstraint::Horizontal;
 use super::style;
 use super::my_math;
 
@@ -242,7 +241,7 @@ impl<'a> PolygonBuilder<'a> {
     pub fn raw_polygon(&self) -> Option<&Polygon> {
         self.raw_polygon.as_ref()
     }
-    pub fn draw_ctx(&self, target: &mut dyn sf::RenderTarget) {
+    pub fn draw_ctx(&self, target: &mut dyn RenderTarget) {
         if let Some(poly) = self.raw_polygon.as_ref() {
             poly.draw_points(target);
         }
@@ -259,13 +258,13 @@ impl<'a> PolygonBuilder<'a> {
         target.draw(&self.new_line);
     }
 
-    pub fn draw_edges(&self, target: &mut dyn sf::RenderTarget) {
+    pub fn draw_edges(&self, target: &mut dyn RenderTarget) {
         if let Some(poly) = self.raw_polygon.as_ref() {
             poly.draw_edges(target);
         }
     }
 
-    pub fn draw_bresenham_edges(&self, target: &mut dyn sf::RenderTarget, img_target: &mut sf::Image) {
+    pub fn draw_bresenham_edges(&self, _target: &mut dyn RenderTarget, img_target: &mut sf::Image) {
         if let Some(poly) = self.raw_polygon.as_ref() {
             poly.draw_edges_bresenham(img_target);
         }
@@ -287,7 +286,7 @@ pub struct PolygonObject<'a> {
     offset_polygon: Polygon<'a>,
 
     // Point hover
-    hover_circle: sf::CircleShape<'a>,
+    hover_circle: CircleShape<'a>,
     is_point_hovered: bool,
     hovered_point_id: usize,
 
@@ -299,7 +298,7 @@ pub struct PolygonObject<'a> {
 
     // Insert/remove
     can_insert: bool,
-    insert_circle: sf::CircleShape<'a>,
+    insert_circle: CircleShape<'a>,
     insert_pos: sf::Vector2f,
 }
 

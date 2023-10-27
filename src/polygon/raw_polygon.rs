@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::rc::Rc;
 use geo::LineIntersection;
-use sfml::graphics::{Drawable, RcFont, RcText, RcTexture, RenderTarget, Shape, Transformable};
-use crate::my_math::{cross2, distance, vec_norm};
+use sfml::graphics::{Drawable, RcFont, RcTexture, RenderTarget, Shape, Transformable};
+use crate::my_math::{cross2};
 use super::sf;
 use super::style;
 use super::my_math;
@@ -89,10 +89,10 @@ impl<'a> Point<'a> {
         }
     }
 
-    pub fn draw_selection_circle(&self, target: &mut dyn sf::RenderTarget) {
+    pub fn draw_selection_circle(&self, target: &mut dyn RenderTarget) {
         target.draw(&self.selection_circle);
     }
-    pub fn draw_point_circle(&self, target: &mut dyn sf::RenderTarget) {
+    pub fn draw_point_circle(&self, target: &mut dyn RenderTarget) {
         target.draw(&self.point_circle);
     }
 }
@@ -126,8 +126,8 @@ pub struct Polygon<'a> {
 
     name: String,
     // Resources references
-    constraint_texture: Option<Rc<sf::RcTexture>>,
-    font: Option<Rc<sf::RcFont>>,
+    constraint_texture: Option<Rc<RcTexture>>,
+    font: Option<Rc<RcFont>>,
 }
 
 
@@ -527,11 +527,11 @@ impl<'a> Polygon<'a> {
         }
     }
 
-    pub fn draw_point_selection(&self, id: isize, target: &mut dyn sf::RenderTarget) {
+    pub fn draw_point_selection(&self, id: isize, target: &mut dyn RenderTarget) {
         self.points[self.fix_index(id)].draw_selection_circle(target);
     }
 
-    pub fn draw_labels(&self, target: &mut dyn sf::RenderTarget) {
+    pub fn draw_labels(&self, target: &mut dyn RenderTarget) {
         for (id, sprite) in self.edge_constraint_sprites.iter().enumerate() {
             if self.points[id].edge_constraint != EdgeConstraint::None {
                 target.draw(sprite);
