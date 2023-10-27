@@ -11,6 +11,7 @@ use super::sf;
 use raw_polygon::Polygon;
 use raw_polygon::EdgeConstraint;
 use crate::my_math::{cross2, is_right_turn};
+use crate::polygon::raw_polygon::EdgeConstraint::Horizontal;
 use super::style;
 use super::my_math;
 
@@ -338,6 +339,7 @@ impl<'a> PolygonObject<'a> {
             offset_polygon: Polygon::new(),
         }
     }
+
     pub fn raw_polygon(&self) -> &Polygon {
         &self.raw_polygon
     }
@@ -345,15 +347,18 @@ impl<'a> PolygonObject<'a> {
     pub fn can_insert(&self) -> bool {
         self.can_insert
     }
+
     pub fn get_insert_pos(&self) -> sf::Vector2f {
         self.insert_pos
     }
+
     pub fn insert_point(&mut self, id: isize, pos: sf::Vector2f) {
         self.raw_polygon.set_edge_contsraint(id - 1, EdgeConstraint::None);
         self.raw_polygon.insert_point_with_pos(id, pos);
         self.update_offset();
         self.can_insert = false;
     }
+
     pub fn set_point_hover_color(&mut self, color: sf::Color) {
         self.hover_circle.set_fill_color(color);
     }
@@ -460,12 +465,15 @@ impl<'a> PolygonObject<'a> {
     pub fn is_hover_show_disabled(&self) -> bool {
         self.show_hover
     }
+
     pub fn disable_hover_show(&mut self) {
         self.show_hover = true;
     }
+
     pub fn enable_hover_show(&mut self) {
         self.show_hover = false;
     }
+
     pub fn is_point_hovered(&self) -> bool {
         self.is_point_hovered
     }
@@ -495,77 +503,76 @@ impl<'a> PolygonObject<'a> {
     pub fn select_point(&mut self, id: isize) {
         self.raw_polygon.select_point(id);
         self.selection.insert(self.raw_polygon.fix_index(id));
-
-        let id = self.raw_polygon.fix_index(id) as isize;
-
-        let mut i = id;
-        while self.raw_polygon.get_edge_constraint(i) != EdgeConstraint::None {
-            self.raw_polygon.select_point(i);
-            self.selection.insert(self.raw_polygon.fix_index(i));
-
-            self.raw_polygon.select_point(i + 1);
-            self.selection.insert(self.raw_polygon.fix_index(i + 1));
-
-            i = self.raw_polygon.fix_index(i + 1) as isize;
-
-            if id == i {
-                break;
-            }
-        }
-
-        let mut i = id - 1;
-        while self.raw_polygon.get_edge_constraint(i) != EdgeConstraint::None {
-            self.raw_polygon.select_point(i);
-            self.selection.insert(self.raw_polygon.fix_index(i));
-
-            self.raw_polygon.select_point(i + 1);
-            self.selection.insert(self.raw_polygon.fix_index(i + 1));
-
-            i = self.raw_polygon.fix_index(i - 1) as isize;
-
-            if id == i {
-                break;
-            }
-        }
+        //
+        // let id = self.raw_polygon.fix_index(id) as isize;
+        //
+        // let mut i = id;
+        // while self.raw_polygon.get_edge_constraint(i) != EdgeConstraint::None {
+        //     self.raw_polygon.select_point(i);
+        //     self.selection.insert(self.raw_polygon.fix_index(i));
+        //
+        //     self.raw_polygon.select_point(i + 1);
+        //     self.selection.insert(self.raw_polygon.fix_index(i + 1));
+        //
+        //     i = self.raw_polygon.fix_index(i + 1) as isize;
+        //
+        //     if id == i {
+        //         break;
+        //     }
+        // }
+        //
+        // let mut i = id - 1;
+        // while self.raw_polygon.get_edge_constraint(i) != EdgeConstraint::None {
+        //     self.raw_polygon.select_point(i);
+        //     self.selection.insert(self.raw_polygon.fix_index(i));
+        //
+        //     self.raw_polygon.select_point(i + 1);
+        //     self.selection.insert(self.raw_polygon.fix_index(i + 1));
+        //
+        //     i = self.raw_polygon.fix_index(i - 1) as isize;
+        //
+        //     if id == i {
+        //         break;
+        //     }
+        // }
     }
 
     pub fn deselect_point(&mut self, id: isize) {
         self.raw_polygon.deselect_point(id);
         self.selection.remove(&self.raw_polygon.fix_index(id));
-
-        let id = self.raw_polygon.fix_index(id) as isize;
-
-        let mut i = id;
-        while self.raw_polygon.get_edge_constraint(i) != EdgeConstraint::None {
-            self.raw_polygon.deselect_point(i);
-            self.selection.remove(&self.raw_polygon.fix_index(i));
-
-            self.raw_polygon.deselect_point(i + 1);
-            self.selection.remove(&self.raw_polygon.fix_index(i + 1));
-
-            i = self.raw_polygon.fix_index(i + 1) as isize;
-
-            if id == i {
-                break;
-            }
-        }
-
-        let mut i = id - 1;
-        while self.raw_polygon.get_edge_constraint(i) != EdgeConstraint::None {
-            self.raw_polygon.deselect_point(i);
-            self.selection.remove(&self.raw_polygon.fix_index(i));
-
-            self.raw_polygon.deselect_point(i + 1);
-            self.selection.remove(&self.raw_polygon.fix_index(i + 1));
-
-            i = self.raw_polygon.fix_index(i - 1) as isize;
-
-            if id == i {
-                break;
-            }
-        }
+        //
+        // let id = self.raw_polygon.fix_index(id) as isize;
+        //
+        // let mut i = id;
+        // while self.raw_polygon.get_edge_constraint(i) != EdgeConstraint::None {
+        //     self.raw_polygon.deselect_point(i);
+        //     self.selection.remove(&self.raw_polygon.fix_index(i));
+        //
+        //     self.raw_polygon.deselect_point(i + 1);
+        //     self.selection.remove(&self.raw_polygon.fix_index(i + 1));
+        //
+        //     i = self.raw_polygon.fix_index(i + 1) as isize;
+        //
+        //     if id == i {
+        //         break;
+        //     }
+        // }
+        //
+        // let mut i = id - 1;
+        // while self.raw_polygon.get_edge_constraint(i) != EdgeConstraint::None {
+        //     self.raw_polygon.deselect_point(i);
+        //     self.selection.remove(&self.raw_polygon.fix_index(i));
+        //
+        //     self.raw_polygon.deselect_point(i + 1);
+        //     self.selection.remove(&self.raw_polygon.fix_index(i + 1));
+        //
+        //     i = self.raw_polygon.fix_index(i - 1) as isize;
+        //
+        //     if id == i {
+        //         break;
+        //     }
+        // }
     }
-
 
     pub fn deselect_all_points(&mut self) {
         for id in self.selection.iter() {
@@ -593,11 +600,44 @@ impl<'a> PolygonObject<'a> {
         self.selection.len()
     }
 
-
     pub fn move_selected_points(&mut self, vec: sf::Vector2f) {
+        let mut moved = Vec::new();
+        moved.resize(self.raw_polygon.points_count(), false);
+
         for id in self.selection.iter() {
+            if moved[*id] {
+                continue;
+            }
+
             self.raw_polygon.update_point_pos(self.raw_polygon.get_point_pos(*id as isize) + vec, *id as isize);
+            moved[*id] = true;
+
+            let prev_id = self.raw_polygon.fix_index(*id as isize - 1) as isize;
+            let mut prev_point = self.raw_polygon.get_point_pos(prev_id);
+            let next_id = self.raw_polygon.fix_index(*id as isize + 1) as isize;
+            let mut next_point = self.raw_polygon.get_point_pos(next_id);
+
+            if self.raw_polygon.get_edge_constraint(prev_id) == EdgeConstraint::Vertical {
+                prev_point.x += vec.x;
+                self.raw_polygon.update_point_pos(prev_point, prev_id);
+                moved[prev_id as usize] = true;
+            } else if self.raw_polygon.get_edge_constraint(prev_id) == EdgeConstraint::Horizontal {
+                prev_point.y += vec.y;
+                self.raw_polygon.update_point_pos(prev_point, prev_id);
+                moved[prev_id as usize] = true;
+            }
+
+            if self.raw_polygon.get_edge_constraint(*id as isize) == EdgeConstraint::Vertical {
+                next_point.x += vec.x;
+                self.raw_polygon.update_point_pos(next_point, next_id);
+                moved[next_id as usize] = true;
+            } else if self.raw_polygon.get_edge_constraint(*id as isize) == EdgeConstraint::Horizontal {
+                next_point.y += vec.y;
+                self.raw_polygon.update_point_pos(next_point, next_id);
+                moved[next_id as usize] = true;
+            }
         }
+
         self.update_offset();
     }
 
@@ -622,6 +662,7 @@ impl<'a> PolygonObject<'a> {
 
         self.raw_polygon.draw_labels(target);
     }
+
     pub fn draw_edges(&self, target: &mut dyn RenderTarget) {
         self.raw_polygon.draw_edges(target);
 
@@ -629,6 +670,7 @@ impl<'a> PolygonObject<'a> {
             self.offset_polygon.draw_edges(target);
         }
     }
+
     pub fn draw_bresenham_edges(&self, target: &mut dyn RenderTarget, img_target: &mut sf::Image) {
         self.raw_polygon.draw_edges_bresenham(img_target);
 
@@ -636,6 +678,7 @@ impl<'a> PolygonObject<'a> {
             self.offset_polygon.draw_edges_bresenham(img_target);
         }
     }
+
     pub fn update_offset(&mut self) {
         if !self.show_offset || self.raw_polygon.is_self_crossing() {
             return;
@@ -863,6 +906,7 @@ impl<'a> PolygonObject<'a> {
             self.show_offset = show_offset;
             self.update_offset();
         }
+
         egui::CollapsingHeader::new("Edges")
             .default_open(true)
             .show(ui, |ui| {
