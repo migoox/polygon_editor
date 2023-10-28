@@ -536,40 +536,36 @@ impl<'a> PolygonObject<'a> {
     }
 
     pub fn move_selected_points(&mut self, vec: sf::Vector2f) {
-        let mut moved = Vec::new();
-        moved.resize(self.raw_polygon.points_count(), false);
-
+        // Move all selected points by the given vector
         for id in self.selection.iter() {
-            if moved[*id] {
-                continue;
-            }
-
             self.raw_polygon.update_point_pos(self.raw_polygon.get_point_pos(*id as isize) + vec, *id as isize);
-            moved[*id] = true;
+        }
 
+        //
+        for id in self.selection.iter() {
             let prev_id = self.raw_polygon.fix_index(*id as isize - 1) as isize;
             let mut prev_point = self.raw_polygon.get_point_pos(prev_id);
             let next_id = self.raw_polygon.fix_index(*id as isize + 1) as isize;
             let mut next_point = self.raw_polygon.get_point_pos(next_id);
 
-            if self.raw_polygon.get_edge_constraint(prev_id) == EdgeConstraint::Vertical {
-                prev_point.x += vec.x;
-                self.raw_polygon.update_point_pos(prev_point, prev_id);
-                moved[prev_id as usize] = true;
-            } else if self.raw_polygon.get_edge_constraint(prev_id) == EdgeConstraint::Horizontal {
-                prev_point.y += vec.y;
-                self.raw_polygon.update_point_pos(prev_point, prev_id);
-                moved[prev_id as usize] = true;
+            if !self.selection.contains(&(prev_id as usize)) {
+                if self.raw_polygon.get_edge_constraint(prev_id) == EdgeConstraint::Vertical {
+                    prev_point.x += vec.x;
+                    self.raw_polygon.update_point_pos(prev_point, prev_id);
+                } else if self.raw_polygon.get_edge_constraint(prev_id) == EdgeConstraint::Horizontal {
+                    prev_point.y += vec.y;
+                    self.raw_polygon.update_point_pos(prev_point, prev_id);
+                }
             }
 
-            if self.raw_polygon.get_edge_constraint(*id as isize) == EdgeConstraint::Vertical {
-                next_point.x += vec.x;
-                self.raw_polygon.update_point_pos(next_point, next_id);
-                moved[next_id as usize] = true;
-            } else if self.raw_polygon.get_edge_constraint(*id as isize) == EdgeConstraint::Horizontal {
-                next_point.y += vec.y;
-                self.raw_polygon.update_point_pos(next_point, next_id);
-                moved[next_id as usize] = true;
+            if !self.selection.contains(&(next_id as usize)) {
+                if self.raw_polygon.get_edge_constraint(*id as isize) == EdgeConstraint::Vertical {
+                    next_point.x += vec.x;
+                    self.raw_polygon.update_point_pos(next_point, next_id);
+                } else if self.raw_polygon.get_edge_constraint(*id as isize) == EdgeConstraint::Horizontal {
+                    next_point.y += vec.y;
+                    self.raw_polygon.update_point_pos(next_point, next_id);
+                }
             }
         }
 
