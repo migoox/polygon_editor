@@ -1,11 +1,16 @@
+use std::fs;
 use std::time::Instant;
+use egui_file::DialogType;
 
 use egui_sfml::{
     egui,
     SfEgui,
 };
+use egui_sfml::egui::Widget;
+use serde_json::{from_str, to_string};
 
 use sfml::graphics::RenderTarget;
+use crate::polygon::{PolygonObject, RawPolygonCoords};
 use crate::state_machine::{IdleState, State};
 
 use super::sf;
@@ -20,16 +25,14 @@ pub enum DrawingMode {
 }
 
 pub struct AppContext<'a> {
-    pub polygon_builder: polygon::PolygonBuilder<'a>,
-    pub polygons: Vec<polygon::PolygonObject<'a>>,
+    pub polygon_obj_factory: polygon::PolygonObjectFactory<'a>,
+    pub polygon_objs: Vec<polygon::PolygonObject<'a>>,
 }
-
-pub struct Resources {}
 
 pub struct Application<'a> {
     window: sf::RenderWindow,
     cpu_drawing_image: sf::Image,
-    program_scale: f32,
+    ui_scale: f32,
 
     // Option is required, since we are temporary taking ownership
     // of the State, each time the transition function is called.
@@ -37,7 +40,11 @@ pub struct Application<'a> {
     curr_state: Option<Box<dyn State>>,
     app_ctx: AppContext<'a>,
     drawing_mode: DrawingMode,
-    egui_rect: egui::Rect,
+
+    // Egui
+    egui_rects: Vec<egui::Rect>,
+    opened_file: Option<std::path::PathBuf>,
+    file_dialog: Option<egui_file::FileDialog>,
 
     // Input
     a_pressed: bool,
@@ -56,22 +63,22 @@ impl Application<'_> {
 
         window.set_vertical_sync_enabled(true);
 
-        let program_scale = 0.8;
-
         let mut result = Application {
             window,
-            program_scale,
+            ui_scale: 0.8,
             cpu_drawing_image: sf::Image::new(style::WIN_SIZE_X, style::WIN_SIZE_Y),
             curr_state: Some(Box::new(IdleState)),
             app_ctx: AppContext {
-                polygons: Vec::new(),
-                polygon_builder: polygon::PolygonBuilder::new(),
+                polygon_objs: Vec::new(),
+                polygon_obj_factory: polygon::PolygonObjectFactory::new(),
             },
             drawing_mode: DrawingMode::GPULines,
-            egui_rect: egui::Rect::EVERYTHING,
+            egui_rects: Vec::new(),
             a_pressed: false,
             ctrl_pressed: false,
             left_mouse_pressed: false,
+            opened_file: None,
+            file_dialog: None,
         };
 
 
@@ -144,8 +151,10 @@ impl Application<'_> {
                 // If mouse has been clicked do not react when it's inside of the egui window bounds
                 match ev {
                     sf::Event::MouseButtonPressed { button: _, x, y } => {
-                        if !self.egui_rect.contains(egui::Pos2::new(x as f32, y as f32)) {
-                            self.handle_input(&ev);
+                        for rect_id in 0..self.egui_rects.len() {
+                            if !self.egui_rects[rect_id].contains(egui::Pos2::new(x as f32, y as f32)) {
+                                self.handle_input(&ev);
+                            }
                         }
                     }
                     _ => self.handle_input(&ev),
@@ -159,7 +168,7 @@ impl Application<'_> {
             // Egui frame
             sfegui
                 .do_frame(|ctx| {
-                    self.set_egui_scale(&ctx, self.program_scale);
+                    self.set_egui_scale(&ctx, self.ui_scale);
                     self.render_egui(&ctx);
                 })
                 .unwrap();
@@ -198,6 +207,46 @@ impl Application<'_> {
         ]
             .into();
         ctx.set_style(style);
+    }
+
+    fn save(&mut self) {
+        if !self.opened_file.is_some() {
+            return;
+        }
+
+        let raw_polygons: Vec<RawPolygonCoords> = self.app_ctx.polygon_objs
+            .iter()
+            .map(|pobj| pobj.get_raw())
+            .collect();
+
+        let json_string = to_string(&raw_polygons).unwrap();
+        if let Err(err) = fs::write(self.opened_file.clone().unwrap().as_path(), json_string) {
+            eprintln!("Error writing to file: {}", err);
+        } else {
+            println!("String successfully saved");
+        }
+    }
+
+    fn load(&mut self) {
+        if !self.opened_file.is_some() {
+            return;
+        }
+
+        match fs::read_to_string(self.opened_file.clone().unwrap().as_path()) {
+            Ok(contents) => {
+                let raw_polygons: Vec<RawPolygonCoords> = from_str(&contents).unwrap();
+                self.app_ctx.polygon_objs.clear();
+                self.app_ctx.polygon_obj_factory.clear();
+
+                for raw in raw_polygons {
+                    self.app_ctx.polygon_objs.push(self.app_ctx.polygon_obj_factory.build_from_raw(raw));
+                }
+            }
+            Err(err) => {
+                eprintln!("Error reading from the file: {}", err);
+                self.opened_file = None;
+            }
+        }
     }
 
     fn handle_input(&mut self, ev: &sf::Event) {
@@ -274,13 +323,13 @@ impl Application<'_> {
         // Draw edges of the polygons
         match self.drawing_mode {
             DrawingMode::GPULines => {
-                for poly in &self.app_ctx.polygons {
+                for poly in &self.app_ctx.polygon_objs {
                     poly.draw_edges(&mut self.window);
                     poly.draw_ctx(&mut self.window);
                 }
 
-                self.app_ctx.polygon_builder.draw_edges(&mut self.window);
-                self.app_ctx.polygon_builder.draw_ctx(&mut self.window);
+                self.app_ctx.polygon_obj_factory.draw_edges(&mut self.window);
+                self.app_ctx.polygon_obj_factory.draw_ctx(&mut self.window);
             }
             DrawingMode::CPUBresenhamLines => {
                 // Clear the framebuffer
@@ -290,10 +339,10 @@ impl Application<'_> {
                     }
                 }
 
-                for poly in &self.app_ctx.polygons {
+                for poly in &self.app_ctx.polygon_objs {
                     poly.draw_bresenham_edges(&mut self.window, &mut self.cpu_drawing_image);
                 }
-                self.app_ctx.polygon_builder.draw_bresenham_edges(&mut self.window, &mut self.cpu_drawing_image);
+                self.app_ctx.polygon_obj_factory.draw_bresenham_edges(&mut self.window, &mut self.cpu_drawing_image);
 
                 // Draw the framebuffer
                 let mut texture = sf::Texture::new();
@@ -310,27 +359,65 @@ impl Application<'_> {
                 let sprite = sf::Sprite::with_texture(texture.as_ref().unwrap());
                 self.window.draw(&sprite);
 
-                for poly in &self.app_ctx.polygons {
+                for poly in &self.app_ctx.polygon_objs {
                     poly.draw_ctx(&mut self.window);
                 }
-                self.app_ctx.polygon_builder.draw_ctx(&mut self.window);
+                self.app_ctx.polygon_obj_factory.draw_ctx(&mut self.window);
             }
         };
     }
 
     fn render_egui(&mut self, ctx: &egui::Context) {
+        egui::TopBottomPanel::top("Top").show(&ctx, |ui| {
+            ui.menu_button("File", |ui| {
+                {
+                    if egui::Button::new("Save").sense(egui::Sense {
+                        click: self.opened_file.is_some(),
+                        drag: self.opened_file.is_some(),
+                        focusable: self.opened_file.is_some(),
+                    }).ui(ui).clicked() {
+                        self.save();
+                    };
+
+                    if ui.button("Save as...").clicked() {
+                        let mut dialog = egui_file::FileDialog::save_file(self.opened_file.clone());
+                        dialog.open();
+                        self.file_dialog = Some(dialog);
+                    }
+                }
+                ui.separator();
+                {
+                    if ui.button("Load...").clicked() {
+                        let mut dialog = egui_file::FileDialog::open_file(self.opened_file.clone());
+                        dialog.open();
+                        self.file_dialog = Some(dialog);
+                    }
+                }
+            });
+        });
+        // Handle dialog
+        if let Some(dialog) = &mut self.file_dialog {
+            if dialog.show(ctx).selected() {
+                if dialog.path().is_some() {
+                    self.opened_file = Some(dialog.path().unwrap().to_path_buf());
+                    if dialog.dialog_type() == DialogType::OpenFile {
+                        self.load();
+                    } else if dialog.dialog_type() == DialogType::SaveFile {
+                        self.save();
+                    }
+                }
+            }
+        }
         egui::Window::new("Options")
             .default_width(300.)
             .show(ctx, |ui| {
-                self.egui_rect = ctx.used_rect();
-
                 ui.label("Polygons:");
                 egui::ScrollArea::vertical()
-                    .max_height(400.0)
+                    .max_height(350.0)
                     .show(ui, |ui| {
-                        self.app_ctx.polygons.retain_mut(|poly| {
+                        self.app_ctx.polygon_objs.retain_mut(|poly| {
                             let mut remove_flag = true;
-                            egui::CollapsingHeader::new(poly.raw_polygon().get_name())
+                            egui::CollapsingHeader::new(poly.polygon().get_name())
                                 .default_open(true)
                                 .show(ui, |ui| {
                                     // Delete button
@@ -359,9 +446,10 @@ impl Application<'_> {
                     });
 
                 ui.separator();
+
                 let mut polygon_flag = false;
                 let mut polygon_with_selected_points = 0;
-                for (id, poly) in self.app_ctx.polygons.iter().enumerate() {
+                for (id, poly) in self.app_ctx.polygon_objs.iter().enumerate() {
                     if poly.selected_points_count() > 0 {
                         polygon_with_selected_points = id;
                         if polygon_flag {
@@ -374,10 +462,20 @@ impl Application<'_> {
 
                 ui.label("Selected edge:");
                 if polygon_flag {
-                    self.app_ctx.polygons[polygon_with_selected_points].draw_selection_egui(ui);
+                    if !self.app_ctx.polygon_objs[polygon_with_selected_points].draw_selected_edge_egui(ui) {
+                        ui.label("None");
+                    }
                 } else {
                     ui.label("None");
                 }
+
+                ui.label("Selected polygon:");
+                if polygon_flag {
+                    self.app_ctx.polygon_objs[polygon_with_selected_points].draw_polygon_options_egui(ui);
+                } else {
+                    ui.label("None");
+                }
+
                 ui.separator();
 
                 if ui.button("Add a polygon").clicked() {
@@ -396,5 +494,15 @@ impl Application<'_> {
                     self.curr_state = Some(self.curr_state.take().unwrap().on_cancel_btn(&mut self.app_ctx));
                 }
             });
+
+        self.egui_rects.clear();
+        ctx.memory(|mem| {
+            if let Some(rect) = mem.area_rect("Options") {
+                self.egui_rects.push(rect);
+            }
+            if let Some(rect) = mem.area_rect("Top") {
+                self.egui_rects.push(rect);
+            }
+        });
     }
 }
