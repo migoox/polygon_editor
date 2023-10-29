@@ -50,3 +50,12 @@ pub fn is_ccw(points: &[sf::Vector2f]) -> bool {
 
     sum > 0.
 }
+
+pub fn circle_vs_plane_frac(distance: f32, radius: f32) -> f32 {
+    if distance > radius {
+        return 0.0;
+    }
+    return 0.5 - distance *
+        (radius * radius - distance * distance).sqrt() / (std::f32::consts::PI * radius * radius) -
+        1. / std::f32::consts::PI * (distance / radius).asin();
+}

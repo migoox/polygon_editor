@@ -6,22 +6,24 @@ use egui_sfml::{
     egui,
     SfEgui,
 };
-use egui_sfml::egui::Widget;
+use egui_sfml::egui::{Sense, Widget};
 use serde_json::{from_str, to_string};
 
 use sfml::graphics::RenderTarget;
+use crate::line_alg::{LinePainter, LinePainterAlgorithm};
 use crate::polygon::{PolygonObject, RawPolygonCoords};
 use crate::state_machine::{IdleState, State};
 
 use super::sf;
 use super::polygon;
 use super::style;
+use super::line_alg;
 
 #[derive(Debug)]
 #[derive(PartialEq)]
 pub enum DrawingMode {
-    GPULines,
-    CPUBresenhamLines,
+    GPU,
+    CPU,
 }
 
 pub struct AppContext<'a> {
@@ -40,6 +42,7 @@ pub struct Application<'a> {
     curr_state: Option<Box<dyn State>>,
     app_ctx: AppContext<'a>,
     drawing_mode: DrawingMode,
+    line_painter: LinePainter,
 
     // Egui
     egui_rects: Vec<egui::Rect>,
@@ -72,13 +75,14 @@ impl Application<'_> {
                 polygon_objs: Vec::new(),
                 polygon_obj_factory: polygon::PolygonObjectFactory::new(),
             },
-            drawing_mode: DrawingMode::GPULines,
+            drawing_mode: DrawingMode::GPU,
             egui_rects: Vec::new(),
             a_pressed: false,
             ctrl_pressed: false,
             left_mouse_pressed: false,
             opened_file: None,
             file_dialog: None,
+            line_painter: LinePainter::new(style::LINES_COLOR, 2.0),
         };
 
 
@@ -322,7 +326,7 @@ impl Application<'_> {
     fn render(&mut self) {
         // Draw edges of the polygons
         match self.drawing_mode {
-            DrawingMode::GPULines => {
+            DrawingMode::GPU => {
                 for poly in &self.app_ctx.polygon_objs {
                     poly.draw_edges(&mut self.window);
                     poly.draw_ctx(&mut self.window);
@@ -331,7 +335,7 @@ impl Application<'_> {
                 self.app_ctx.polygon_obj_factory.draw_edges(&mut self.window);
                 self.app_ctx.polygon_obj_factory.draw_ctx(&mut self.window);
             }
-            DrawingMode::CPUBresenhamLines => {
+            DrawingMode::CPU => {
                 // Clear the framebuffer
                 for y in 0..style::WIN_SIZE_Y {
                     for x in 0..style::WIN_SIZE_X {
@@ -340,9 +344,9 @@ impl Application<'_> {
                 }
 
                 for poly in &self.app_ctx.polygon_objs {
-                    poly.draw_bresenham_edges(&mut self.window, &mut self.cpu_drawing_image);
+                    poly.draw_bresenham_edges(&mut self.window, &mut self.cpu_drawing_image, &self.line_painter);
                 }
-                self.app_ctx.polygon_obj_factory.draw_bresenham_edges(&mut self.window, &mut self.cpu_drawing_image);
+                self.app_ctx.polygon_obj_factory.draw_bresenham_edges(&mut self.window, &mut self.cpu_drawing_image, &self.line_painter);
 
                 // Draw the framebuffer
                 let mut texture = sf::Texture::new();
@@ -413,12 +417,12 @@ impl Application<'_> {
             .show(ctx, |ui| {
                 ui.label("Polygons:");
                 egui::ScrollArea::vertical()
-                    .max_height(350.0)
+                    .max_height(300.0)
                     .show(ui, |ui| {
                         self.app_ctx.polygon_objs.retain_mut(|poly| {
                             let mut remove_flag = true;
                             egui::CollapsingHeader::new(poly.polygon().get_name())
-                                .default_open(true)
+                                .default_open(false)
                                 .show(ui, |ui| {
                                     // Delete button
                                     if ui.button("Delete").clicked() {
@@ -435,15 +439,35 @@ impl Application<'_> {
 
                 ui.separator();
                 // Pick the drawing method
-                egui::ComboBox::from_label("Drawing method")
+                egui::ComboBox::from_label("Rendering")
                     .selected_text(match self.drawing_mode {
-                        DrawingMode::GPULines => "Lines [GPU]",
-                        DrawingMode::CPUBresenhamLines => "Bresenham Lines [CPU]"
+                        DrawingMode::GPU => "Library [GPU]",
+                        DrawingMode::CPU => "Bresenham [CPU]"
                     })
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.drawing_mode, DrawingMode::GPULines, "Lines [GPU]");
-                        ui.selectable_value(&mut self.drawing_mode, DrawingMode::CPUBresenhamLines, "Bresenham Lines [CPU]");
+                        ui.selectable_value(&mut self.drawing_mode, DrawingMode::GPU, "Library [GPU]");
+                        ui.selectable_value(&mut self.drawing_mode, DrawingMode::CPU, "Bresenham [CPU]");
                     });
+
+                if self.drawing_mode == DrawingMode::CPU {
+                    let mut alg = self.line_painter.alg();
+                    let mut thickness = self.line_painter.thickness();
+                    egui::ComboBox::from_label("Algorithm")
+                        .selected_text(match alg {
+                            LinePainterAlgorithm::MidPointLine => "MidPointLine",
+                            LinePainterAlgorithm::SymmetricMidPointLine => "SymmetricMidPointLine",
+                            LinePainterAlgorithm::GuptaDoubleStepMidPointLine => "GuptaDoubleStepMidPointLine",
+                        })
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut alg, LinePainterAlgorithm::MidPointLine, "MidPointLine");
+                            ui.selectable_value(&mut alg, LinePainterAlgorithm::SymmetricMidPointLine, "SymmetricMidPointLine");
+                            ui.selectable_value(&mut alg, LinePainterAlgorithm::GuptaDoubleStepMidPointLine, "GuptaDoubleStepMidPointLine");
+                        });
+
+                    ui.add(egui::Slider::new(&mut thickness, 1.0..=10.0).text("Thickness"));
+                    self.line_painter.set_alg(alg);
+                    self.line_painter.set_thickness(thickness);
+                }
 
                 ui.separator();
 
@@ -471,7 +495,11 @@ impl Application<'_> {
 
                 ui.label("Selected polygon:");
                 if polygon_flag {
-                    self.app_ctx.polygon_objs[polygon_with_selected_points].draw_polygon_options_egui(ui);
+                    if ui.button("Delete").clicked() {
+                        self.app_ctx.polygon_objs.remove(polygon_with_selected_points);
+                    } else {
+                        self.app_ctx.polygon_objs[polygon_with_selected_points].draw_polygon_options_egui(ui);
+                    }
                 } else {
                     ui.label("None");
                 }

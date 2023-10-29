@@ -5,12 +5,14 @@ use sfml::graphics::{CircleShape, Drawable, RcFont, RcTexture, RenderTarget, Sha
 use std::collections::HashMap;
 use std::rc::Rc;
 use geo::LineIntersection;
-use crate::my_math::is_right_turn;
+use crate::my_math::{circle_vs_plane_frac, is_right_turn};
 use crate::style;
 use crate::my_math;
 use crate::sf;
 use crate::my_math::cross2;
 use serde::{Serialize, Deserialize};
+use sfml::window::Key::P;
+use crate::line_alg::LinePainter;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct RawCoord {
@@ -596,75 +598,14 @@ impl<'a> Polygon<'a> {
         }
     }
 
-    pub fn put_pixel(&self, x: i32, y: i32, img_target: &mut sf::Image) {
-        if x < img_target.size().x as i32 && x >= 0 &&
-            y < img_target.size().y as i32 && y >= 0 {
-            unsafe { img_target.set_pixel(x as u32, y as u32, self.edges_color) }
-        }
-    }
 
-    pub fn mid_point_line(&self, mut p0: sf::Vector2f, mut p1: sf::Vector2f, img_target: &mut sf::Image) {
-        let mut p0 = sf::Vector2i::new(p0.x as i32, p0.y as i32);
-        let mut p1 = sf::Vector2i::new(p1.x as i32, p1.y as i32);
-
-        // This simplification skips 4 cases out of 8
-        if p1.x < p0.x {
-            std::mem::swap(&mut p0, &mut p1);
-        }
-
-        let mut d = p1 - p0;
-
-        if d.y <= 0 {
-            if d.x.abs() >= d.y.abs() {
-                self.mid_point_line18(p0.x, p0.y, p1.x, d.x, -d.y, 1, -1, |x, y| self.put_pixel(x, y, img_target));
-            } else {
-                self.mid_point_line18(p0.y, p0.x, p1.y, -d.y, d.x, -1, 1, |x, y| self.put_pixel(y, x, img_target));
-            }
-        } else {
-            if d.x.abs() >= d.y.abs() {
-                self.mid_point_line18(p0.x, p0.y, p1.x, d.x, d.y, 1, 1, |x, y| self.put_pixel(x, y, img_target));
-            } else {
-                self.mid_point_line18(p0.y, p0.x, p1.y, d.y, d.x, 1, 1, |x, y| self.put_pixel(y, x, img_target));
-            }
-        }
-    }
-
-    // Works only for 1/8 quarter
-    fn mid_point_line18<F>(&self,
-                           x0: i32, y0: i32,
-                           x1: i32,
-                           dx: i32, dy: i32,
-                           incr_x: i32, incr_y: i32,
-                           mut put_pixel_func: F,
-    ) where
-        F: FnMut(i32, i32),
-    {
-        let mut d = 2 * dy - dx;
-        let incrd_e = 2 * dy;
-        let incrd_ne = 2 * dy - 2 * dx;
-
-        let mut x = x0;
-        let mut y = y0;
-        while (x - x1).abs() > 0 {
-            put_pixel_func(x, y);
-            if d < 0 {
-                d += incrd_e;
-                x += incr_x;
-            } else {
-                d += incrd_ne;
-                x += incr_x;
-                y += incr_y;
-            }
-        }
-    }
-
-    pub fn draw_edges_bresenham(&self, img_target: &mut sf::Image) {
+    pub fn draw_edges_bresenham(&self, img_target: &mut sf::Image, line_painter: &LinePainter) {
         let mut end = self.points_count();
         if !self.show_last_line {
             end -= 1;
         }
         for i in 0..end as isize {
-            self.mid_point_line(self.get_point_pos(i), self.get_point_pos(i + 1), img_target);
+            line_painter.draw_line(self.get_point_pos(i), self.get_point_pos(i + 1), img_target);
         }
     }
 }
@@ -783,6 +724,7 @@ impl<'a> PolygonObjectFactory<'a> {
 
     fn clear_draw_flags(&mut self) {
         self.entered_correct_vertex_region = false;
+        self.is_line_intersecting = false;
     }
 
     pub fn clear(&mut self) {
@@ -939,9 +881,9 @@ impl<'a> PolygonObjectFactory<'a> {
         }
     }
 
-    pub fn draw_bresenham_edges(&self, _target: &mut dyn RenderTarget, img_target: &mut sf::Image) {
+    pub fn draw_bresenham_edges(&self, _target: &mut dyn RenderTarget, img_target: &mut sf::Image, line_painter: &LinePainter) {
         if let Some(poly) = self.polygon.as_ref() {
-            poly.draw_edges_bresenham(img_target);
+            poly.draw_edges_bresenham(img_target, line_painter);
         }
     }
 }
@@ -1280,11 +1222,11 @@ impl<'a> PolygonObject<'a> {
         }
     }
 
-    pub fn draw_bresenham_edges(&self, target: &mut dyn RenderTarget, img_target: &mut sf::Image) {
-        self.polygon.draw_edges_bresenham(img_target);
+    pub fn draw_bresenham_edges(&self, target: &mut dyn RenderTarget, img_target: &mut sf::Image, line_painter: &LinePainter) {
+        self.polygon.draw_edges_bresenham(img_target, line_painter);
 
         if self.show_offset {
-            self.offset_polygon.draw_edges_bresenham(img_target);
+            self.offset_polygon.draw_edges_bresenham(img_target, line_painter);
         }
     }
 
@@ -1536,7 +1478,7 @@ impl<'a> PolygonObject<'a> {
         self.draw_polygon_options_egui(ui);
 
         egui::CollapsingHeader::new("Edges")
-            .default_open(true)
+            .default_open(false)
             .show(ui, |ui| {
                 for id in 0..self.polygon.points_count() as isize {
                     self.draw_line_constraints_egui(id, ui);

@@ -116,6 +116,7 @@ impl State for AddPolygonState {
 
     fn on_edit_points_btn(self: Box<Self>, app_ctx: &mut AppContext) -> Box<dyn State> {
         app_ctx.polygon_obj_factory.clear();
+        println!("AddPolygon -> EditPopints");
         Box::new(EditPointsState::new(app_ctx))
     }
 

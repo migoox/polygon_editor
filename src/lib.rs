@@ -9,3 +9,4 @@ pub mod state_machine;
 pub mod style;
 pub mod my_math;
 pub mod app;
+pub mod line_alg;
