@@ -11,7 +11,7 @@ use glu_sys as gl;
 
 use sfml::graphics::RenderTarget;
 use crate::line_alg::{LinePainter, LinePainterAlgorithm};
-use crate::polygon::RawPolygonCoords;
+use crate::polygon::{Polygon, PolygonObject, RawPolygonCoords};
 use crate::state_machine::{IdleState, State};
 
 use super::sf;
@@ -68,7 +68,7 @@ impl Application<'_> {
         );
         window.set_vertical_sync_enabled(true);
 
-        let mut result = Application {
+        Application {
             window,
             ui_scale: 0.8,
             cpu_drawing_image: sf::Image::new(style::WIN_SIZE_X, style::WIN_SIZE_Y),
@@ -86,59 +86,7 @@ impl Application<'_> {
             file_dialog: None,
             line_painter: LinePainter::new(style::LINES_COLOR, 1.0),
             gpu_antialiasing: false,
-        };
-
-
-        // let mut points: Vec<sf::Vector2f> = Vec::with_capacity(10);
-        // points.push(sf::Vector2f::new(422., 131.));
-        // points.push(sf::Vector2f::new(408., 640.));
-        // points.push(sf::Vector2f::new(1008., 645.));
-        // points.push(sf::Vector2f::new(979., 120.));
-        // points.push(sf::Vector2f::new(740., 119.));
-        // points.push(sf::Vector2f::new(741., 490.));
-        // points.push(sf::Vector2f::new(509., 489.));
-        // points.push(sf::Vector2f::new(510., 248.));
-        // points.push(sf::Vector2f::new(678., 192.));
-        // points.push(sf::Vector2f::new(563., 139.));
-        //
-        // result.app_ctx.polygons.push(PolygonObject::from(Polygon::create(points)));
-
-        //
-        // let mut points: Vec<sf::Vector2f> = Vec::with_capacity(10);
-        // points.push(sf::Vector2f::new(722., 255.));
-        // points.push(sf::Vector2f::new(801., 256.));
-        // points.push(sf::Vector2f::new(797., 114.));
-        // points.push(sf::Vector2f::new(438., 118.));
-        // points.push(sf::Vector2f::new(446., 463.));
-        // points.push(sf::Vector2f::new(893., 451.));
-        // points.push(sf::Vector2f::new(887., 307.));
-        // points.push(sf::Vector2f::new(661., 305.));
-        // points.push(sf::Vector2f::new(652., 373.));
-        // points.push(sf::Vector2f::new(503., 363.));
-        // points.push(sf::Vector2f::new(516., 167.));
-        // points.push(sf::Vector2f::new(726., 163.));
-        //
-        // result.app_ctx.polygons.push(PolygonObject::from(Polygon::create(points)));
-        //
-        // let mut points: Vec<sf::Vector2f> = Vec::with_capacity(10);
-        // points.push(sf::Vector2f::new(347., 228.));
-        // points.push(sf::Vector2f::new(825., 216.));
-        // points.push(sf::Vector2f::new(816., 552.));
-        // points.push(sf::Vector2f::new(974., 560.));
-        // points.push(sf::Vector2f::new(962., 108.));
-        // points.push(sf::Vector2f::new(204., 108.));
-        // points.push(sf::Vector2f::new(187., 624.));
-        // points.push(sf::Vector2f::new(597., 628.));
-        // points.push(sf::Vector2f::new(595., 452.));
-        // points.push(sf::Vector2f::new(505., 453.));
-        // points.push(sf::Vector2f::new(508., 571.));
-        // points.push(sf::Vector2f::new(349., 575.));
-        // points.push(sf::Vector2f::new(351., 430.));
-        // points.push(sf::Vector2f::new(746., 433.));
-        // points.push(sf::Vector2f::new(749., 351.));
-        // points.push(sf::Vector2f::new(348., 351.));
-        // result.app_ctx.polygons.push(PolygonObject::from(Polygon::create(points)));
-        result
+        }
     }
 
     pub fn run(&mut self) {
@@ -445,11 +393,11 @@ impl Application<'_> {
                 egui::ComboBox::from_label("Lines Rendering")
                     .selected_text(match self.drawing_mode {
                         DrawingMode::GPU => "Library [GPU]",
-                        DrawingMode::CPU => "Bresenham [CPU]"
+                        DrawingMode::CPU => "Algorithms [CPU]"
                     })
                     .show_ui(ui, |ui| {
                         ui.selectable_value(&mut self.drawing_mode, DrawingMode::GPU, "Library [GPU]");
-                        ui.selectable_value(&mut self.drawing_mode, DrawingMode::CPU, "Bresenham [CPU]");
+                        ui.selectable_value(&mut self.drawing_mode, DrawingMode::CPU, "Algorithms [CPU]");
                     });
 
                 if self.drawing_mode == DrawingMode::CPU {
@@ -460,11 +408,13 @@ impl Application<'_> {
                             LinePainterAlgorithm::MidPointLine => "MidPointLine",
                             LinePainterAlgorithm::SymmetricMidPointLine => "SymmetricMidPointLine",
                             LinePainterAlgorithm::GuptaDoubleStepMidPointLine => "GuptaDoubleStepMidPointLine",
+                            LinePainterAlgorithm::WULine => "XiaolinWULine",
                         })
                         .show_ui(ui, |ui| {
                             ui.selectable_value(&mut alg, LinePainterAlgorithm::MidPointLine, "MidPointLine");
                             ui.selectable_value(&mut alg, LinePainterAlgorithm::SymmetricMidPointLine, "SymmetricMidPointLine");
                             ui.selectable_value(&mut alg, LinePainterAlgorithm::GuptaDoubleStepMidPointLine, "GuptaDoubleStepMidPointLine");
+                            ui.selectable_value(&mut alg, LinePainterAlgorithm::WULine, "XiaolinWULine");
                         });
 
                     ui.add(egui::Slider::new(&mut thickness, 1.0..=10.0).text("Thickness"));

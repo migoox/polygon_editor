@@ -921,7 +921,7 @@ pub struct PolygonObject<'a> {
 }
 
 impl<'a> PolygonObject<'a> {
-    pub fn from(raw: Polygon<'a>) -> PolygonObject<'a> {
+    pub fn from(polygon: Polygon<'a>) -> PolygonObject<'a> {
         let mut hover_circle = sf::CircleShape::new(style::POINT_DETECTION_RADIUS, 20);
         hover_circle.set_fill_color(style::POINTS_COLOR);
         hover_circle.set_origin(sf::Vector2f::new(style::POINT_DETECTION_RADIUS, style::POINT_DETECTION_RADIUS));
@@ -938,7 +938,7 @@ impl<'a> PolygonObject<'a> {
         remove_circle.set_origin(sf::Vector2f::new(style::POINT_DETECTION_RADIUS, style::POINT_DETECTION_RADIUS));
 
         PolygonObject {
-            polygon: raw,
+            polygon,
             selection: HashSet::new(),
             show_hover: false,
             is_point_hovered: false,
