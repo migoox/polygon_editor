@@ -15,6 +15,7 @@ geo = "0.26.0"
 egui_file = "0.11.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0.1"
+glu-sys = "0.1.4"
 
 [dependencies.sfml]
 git = "https://github.com/jeremyletang/rust-sfml.git"

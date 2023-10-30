@@ -5,13 +5,12 @@ use sfml::graphics::{CircleShape, Drawable, RcFont, RcTexture, RenderTarget, Sha
 use std::collections::HashMap;
 use std::rc::Rc;
 use geo::LineIntersection;
-use crate::my_math::{circle_vs_plane_frac, is_right_turn};
+use crate::my_math::{is_right_turn};
 use crate::style;
 use crate::my_math;
 use crate::sf;
 use crate::my_math::cross2;
 use serde::{Serialize, Deserialize};
-use sfml::window::Key::P;
 use crate::line_alg::LinePainter;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -599,13 +598,13 @@ impl<'a> Polygon<'a> {
     }
 
 
-    pub fn draw_edges_bresenham(&self, img_target: &mut sf::Image, line_painter: &LinePainter) {
+    pub fn draw_edges_bresenham(&self, img_target: &mut sf::Image, line_painter: &mut LinePainter) {
         let mut end = self.points_count();
         if !self.show_last_line {
             end -= 1;
         }
         for i in 0..end as isize {
-            line_painter.draw_line(self.get_point_pos(i), self.get_point_pos(i + 1), img_target);
+            line_painter.draw_line(self.get_point_pos(i), self.get_point_pos(i + 1), self.edges_color, img_target);
         }
     }
 }
@@ -645,6 +644,7 @@ pub struct PolygonObjectFactory<'s> {
     helper_circle: sf::CircleShape<'s>,
 
     new_line: sf::VertexBuffer,
+    new_line_points: [sf::Vector2f; 2],
     new_point_circle: sf::CircleShape<'s>,
 
     // PolygonBuilder events
@@ -678,6 +678,7 @@ impl<'a> PolygonObjectFactory<'a> {
             entered_correct_vertex_region: false,
             helper_circle,
             new_line: sf::VertexBuffer::new(sf::PrimitiveType::LINES, 2, sf::VertexBufferUsage::DYNAMIC),
+            new_line_points: [sf::Vector2f::new(0., 0.), sf::Vector2f::new(0., 0.)],
             new_point_circle,
             font: Rc::new(sf::RcFont::from_file("res/lato.ttf").expect("Couldn't load the font")),
             constraint_texture: Rc::new(sf::RcTexture::from_file("res/link2.png").expect("Couldn't load the texture")),
@@ -700,6 +701,8 @@ impl<'a> PolygonObjectFactory<'a> {
             ],
             0,
         );
+        self.new_line_points[0] = pos1;
+        self.new_line_points[1] = pos2;
     }
 
     // If raw_polygon is None => creates a new one and adds starting point
@@ -865,26 +868,24 @@ impl<'a> PolygonObjectFactory<'a> {
             poly.draw_points(target);
         }
 
-        self.new_line.draw(target, &Default::default());
         target.draw(&self.new_point_circle);
-
         if self.entered_correct_vertex_region {
             target.draw(&self.helper_circle);
         }
-
-        target.draw(&self.new_line);
     }
 
     pub fn draw_edges(&self, target: &mut dyn RenderTarget) {
         if let Some(poly) = self.polygon.as_ref() {
             poly.draw_edges(target);
         }
+        self.new_line.draw(target, &Default::default());
     }
 
-    pub fn draw_bresenham_edges(&self, _target: &mut dyn RenderTarget, img_target: &mut sf::Image, line_painter: &LinePainter) {
+    pub fn draw_bresenham_edges(&self, _target: &mut dyn RenderTarget, img_target: &mut sf::Image, line_painter: &mut LinePainter) {
         if let Some(poly) = self.polygon.as_ref() {
             poly.draw_edges_bresenham(img_target, line_painter);
         }
+        line_painter.draw_line(self.new_line_points[0], self.new_line_points[1], style::POINTS_COLOR, img_target);
     }
 }
 
@@ -1222,7 +1223,7 @@ impl<'a> PolygonObject<'a> {
         }
     }
 
-    pub fn draw_bresenham_edges(&self, target: &mut dyn RenderTarget, img_target: &mut sf::Image, line_painter: &LinePainter) {
+    pub fn draw_bresenham_edges(&self, target: &mut dyn RenderTarget, img_target: &mut sf::Image, line_painter: &mut LinePainter) {
         self.polygon.draw_edges_bresenham(img_target, line_painter);
 
         if self.show_offset {

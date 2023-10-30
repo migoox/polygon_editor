@@ -398,6 +398,7 @@ dependencies = [
  "egui-sfml",
  "egui_file",
  "geo 0.26.0",
+ "glu-sys",
  "line_intersection",
  "rand",
  "serde",

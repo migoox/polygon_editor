@@ -1,4 +1,3 @@
-use sfml::system::Vector2f;
 use super::sf;
 
 pub fn distance(point1: &sf::Vector2f, point2: &sf::Vector2f) -> f32 {

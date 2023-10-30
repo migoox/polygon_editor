@@ -1,23 +1,22 @@
 use std::fs;
 use std::time::Instant;
 use egui_file::DialogType;
-
 use egui_sfml::{
     egui,
     SfEgui,
 };
-use egui_sfml::egui::{Sense, Widget};
+use egui_sfml::egui::Widget;
 use serde_json::{from_str, to_string};
+use glu_sys as gl;
 
 use sfml::graphics::RenderTarget;
 use crate::line_alg::{LinePainter, LinePainterAlgorithm};
-use crate::polygon::{PolygonObject, RawPolygonCoords};
+use crate::polygon::RawPolygonCoords;
 use crate::state_machine::{IdleState, State};
 
 use super::sf;
 use super::polygon;
 use super::style;
-use super::line_alg;
 
 #[derive(Debug)]
 #[derive(PartialEq)]
@@ -43,6 +42,7 @@ pub struct Application<'a> {
     app_ctx: AppContext<'a>,
     drawing_mode: DrawingMode,
     line_painter: LinePainter,
+    gpu_antialiasing: bool,
 
     // Egui
     egui_rects: Vec<egui::Rect>,
@@ -57,13 +57,15 @@ pub struct Application<'a> {
 
 impl Application<'_> {
     pub fn new() -> Application<'static> {
+        let mut settings = sf::ContextSettings::default();
+        settings.antialiasing_level = 8;
+
         let mut window = sf::RenderWindow::new(
             (style::WIN_SIZE_X, style::WIN_SIZE_Y),
             "Polygon editor",
             sf::Style::CLOSE,
-            &Default::default(),
+            &settings,
         );
-
         window.set_vertical_sync_enabled(true);
 
         let mut result = Application {
@@ -82,7 +84,8 @@ impl Application<'_> {
             left_mouse_pressed: false,
             opened_file: None,
             file_dialog: None,
-            line_painter: LinePainter::new(style::LINES_COLOR, 2.0),
+            line_painter: LinePainter::new(style::LINES_COLOR, 1.0),
+            gpu_antialiasing: false,
         };
 
 
@@ -344,9 +347,9 @@ impl Application<'_> {
                 }
 
                 for poly in &self.app_ctx.polygon_objs {
-                    poly.draw_bresenham_edges(&mut self.window, &mut self.cpu_drawing_image, &self.line_painter);
+                    poly.draw_bresenham_edges(&mut self.window, &mut self.cpu_drawing_image, &mut self.line_painter);
                 }
-                self.app_ctx.polygon_obj_factory.draw_bresenham_edges(&mut self.window, &mut self.cpu_drawing_image, &self.line_painter);
+                self.app_ctx.polygon_obj_factory.draw_bresenham_edges(&mut self.window, &mut self.cpu_drawing_image, &mut self.line_painter);
 
                 // Draw the framebuffer
                 let mut texture = sf::Texture::new();
@@ -439,7 +442,7 @@ impl Application<'_> {
 
                 ui.separator();
                 // Pick the drawing method
-                egui::ComboBox::from_label("Rendering")
+                egui::ComboBox::from_label("Lines Rendering")
                     .selected_text(match self.drawing_mode {
                         DrawingMode::GPU => "Library [GPU]",
                         DrawingMode::CPU => "Bresenham [CPU]"
@@ -468,7 +471,16 @@ impl Application<'_> {
                     self.line_painter.set_alg(alg);
                     self.line_painter.set_thickness(thickness);
                 }
-
+                ui.add(egui::Checkbox::new(&mut self.gpu_antialiasing, "GPU Antialiasing (MSAA 8)"));
+                if self.gpu_antialiasing {
+                    unsafe {
+                        gl::glEnable(gl::GL_MULTISAMPLE_ARB);
+                    }
+                } else {
+                    unsafe {
+                        gl::glDisable(gl::GL_MULTISAMPLE_ARB);
+                    }
+                }
                 ui.separator();
 
                 let mut polygon_flag = false;

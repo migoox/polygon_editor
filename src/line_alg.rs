@@ -28,12 +28,6 @@ impl LinePainter {
     pub fn thickness(&self) -> f32 {
         self.thickness
     }
-    pub fn set_color(&mut self, color: sf::Color) {
-        self.color = color;
-    }
-    pub fn color(&self) -> sf::Color {
-        self.color
-    }
     pub fn set_alg(&mut self, alg: LinePainterAlgorithm) {
         self.alg = alg;
     }
@@ -41,14 +35,10 @@ impl LinePainter {
         self.alg.clone()
     }
 
-    fn put_pixel(&self, x: i32, y: i32, thickness: f32, img_target: &mut sf::Image) {
-        let radius = (thickness as i32) / 2. as i32;
-
-        for curr_y in (y - radius + 1)..(y + radius) {
-            if x < img_target.size().x as i32 && x >= 0 &&
-                curr_y < img_target.size().y as i32 && curr_y >= 0 {
-                unsafe { img_target.set_pixel(x as u32, curr_y as u32, self.color) }
-            }
+    fn put_pixel(&self, x: i32, y: i32, img_target: &mut sf::Image) {
+        if x < img_target.size().x as i32 && x >= 0 &&
+            y < img_target.size().y as i32 && y >= 0 {
+            unsafe { img_target.set_pixel(x as u32, y as u32, self.color) }
         }
     }
 
@@ -103,7 +93,8 @@ impl LinePainter {
         return true;
     }
 
-    pub fn draw_line(&self, mut p0: sf::Vector2f, mut p1: sf::Vector2f, img_target: &mut sf::Image) {
+    pub fn draw_line(&mut self, mut p0: sf::Vector2f, mut p1: sf::Vector2f, color: sf::Color, img_target: &mut sf::Image) {
+        self.color = color;
         let mut p0 = sf::Vector2i::new(p0.x as i32, p0.y as i32);
         let mut p1 = sf::Vector2i::new(p1.x as i32, p1.y as i32);
 
@@ -138,15 +129,15 @@ impl LinePainter {
     {
         if rev_func_input {
             match self.alg {
-                LinePainterAlgorithm::MidPointLine => self.mid_point_line18(x0, y0, x1, y1, dx, dy, incr_x, incr_y, |x, y| self.put_pixel(y, x, self.thickness, img_target)),
-                LinePainterAlgorithm::SymmetricMidPointLine => self.symmetric_mid_point_line18(x0, y0, x1, y1, dx, dy, incr_x, incr_y, |x, y| self.put_pixel(y, x, self.thickness, img_target)),
+                LinePainterAlgorithm::MidPointLine => self.mid_point_line18(x0, y0, x1, y1, dx, dy, incr_x, incr_y, |x, y| self.put_pixel(y, x, img_target)),
+                LinePainterAlgorithm::SymmetricMidPointLine => self.symmetric_mid_point_line18(x0, y0, x1, y1, dx, dy, incr_x, incr_y, |x, y| self.put_pixel(y, x, img_target)),
                 LinePainterAlgorithm::GuptaDoubleStepMidPointLine => self.gupta_sproull_antialiased_thick_line18(x0, y0, x1, y1, dx, dy, incr_x, incr_y, |x, y, d| self.intensify_pixel_with_circle_vs_half_plain_frac(y, x, self.thickness, d, img_target)),
             }
             return;
         }
         match self.alg {
-            LinePainterAlgorithm::MidPointLine => self.mid_point_line18(x0, y0, x1, y1, dx, dy, incr_x, incr_y, |x, y| self.put_pixel(x, y, self.thickness, img_target)),
-            LinePainterAlgorithm::SymmetricMidPointLine => self.symmetric_mid_point_line18(x0, y0, x1, y1, dx, dy, incr_x, incr_y, |x, y| self.put_pixel(x, y, self.thickness, img_target)),
+            LinePainterAlgorithm::MidPointLine => self.mid_point_line18(x0, y0, x1, y1, dx, dy, incr_x, incr_y, |x, y| self.put_pixel(x, y, img_target)),
+            LinePainterAlgorithm::SymmetricMidPointLine => self.symmetric_mid_point_line18(x0, y0, x1, y1, dx, dy, incr_x, incr_y, |x, y| self.put_pixel(x, y, img_target)),
             LinePainterAlgorithm::GuptaDoubleStepMidPointLine => self.gupta_sproull_antialiased_thick_line18(x0, y0, x1, y1, dx, dy, incr_x, incr_y, |x, y, d| self.intensify_pixel_with_circle_vs_half_plain_frac(x, y, self.thickness, d, img_target)),
         }
     }
@@ -168,7 +159,11 @@ impl LinePainter {
         let mut distance = (x1 - x0).abs();
 
         while distance.abs() > 0 {
-            put_pixel_func(x0, y0);
+            for i in 0..(self.thickness as i32) {
+                put_pixel_func(x0, y0 + i);
+                put_pixel_func(x0, y0 - i)
+            }
+
             if d < 0 {
                 d += incrd_e;
             } else {
